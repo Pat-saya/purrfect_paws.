@@ -1,0 +1,360 @@
+{% extends "base.html" %} {% block title %}Your Perfect Cat Breed{% endblock %}
+{% block content %}
+<div class="container mt-5">
+  <h2 class="text-center mb-4 main-title">Your Perfect Cat Breed Match</h2>
+
+  {% if breed_scores and breed_scores[0] %}
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="card shadow">
+        <div class="card-body">
+          <div class="text-center mb-4">
+            <h3 class="card-title breed-name">{{ breed_scores[0].name }}</h3>
+            <div class="breed-image-container">
+              <div id="imageLoading" class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+              </div>
+              <img
+                id="breedImage"
+                src=""
+                alt="{{ breed_scores[0].name }}"
+                class="img-fluid rounded"
+                style="display: none"
+              />
+            </div>
+          </div>
+
+          <div class="breed-details">
+            {% for attr in breed_scores[0].attributes.split('\n') %} {% if ':'
+            in attr %} {% set key, value = attr.split(':', 1) %} {% if
+            key.strip() in ['Adaptability', 'Child Friendly', 'Dog Friendly',
+            'Energy Level', 'Grooming', 'Health Issues', 'Intelligence',
+            'Shedding Level', 'Social Needs', 'Stranger Friendly',
+            'Vocalisation'] %}
+            <div class="mb-3">
+              <div class="rating-label">
+                <span>{{ key.strip() }}</span>
+                <span class="rating-value">{{ value.strip() }}</span>
+              </div>
+              <div class="progress">
+                <div
+                  class="progress-bar"
+                  role="progressbar"
+                  style="width: {{ (value.strip().split('/')[0]|int * 20)|round }}%"
+                  aria-valuenow="{{ value.strip().split('/')[0]|int }}"
+                  aria-valuemin="0"
+                  aria-valuemax="5"
+                >
+                  {{ value.strip().split('/')[0]|int }}/5
+                </div>
+              </div>
+            </div>
+            {% else %}
+            <div class="mb-3">
+              <strong>{{ key.strip() }}:</strong> {{ value.strip() }}
+            </div>
+            {% endif %} {% endif %} {% endfor %}
+          </div>
+
+          <div class="social-share mt-4">
+            <h4 class="text-center mb-3">Share Your Results</h4>
+            <div class="share-buttons">
+              <a
+                href="https://www.facebook.com/sharer/sharer.php?u={{ request.url }}"
+                class="share-btn facebook"
+                title="Share on Facebook"
+                target="_blank"
+              >
+                <i class="fab fa-facebook-f"></i>
+              </a>
+              <a
+                href="https://www.linkedin.com/shareArticle?mini=true&url={{ request.url }}&title=I matched with {{ breed_scores[0].name }}!"
+                class="share-btn linkedin"
+                title="Share on LinkedIn"
+                target="_blank"
+              >
+                <i class="fab fa-linkedin-in"></i>
+              </a>
+              <a
+                href="mailto:?subject=My Cat Breed Match - {{ breed_scores[0].name }}&body=I matched with {{ breed_scores[0].name }}! Take the quiz at {{ request.url }}"
+                class="share-btn email"
+                title="Share via Email"
+              >
+                <i class="fas fa-envelope"></i>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div
+    class="d-flex justify-content-center gap-3 mt-5 mb-5"
+    style="margin-top: 3rem"
+  >
+    <a href="{{ url_for('questionnaire') }}" class="btn btn-primary"
+      >Take Quiz Again</a
+    >
+    <button class="btn btn-secondary" onclick="window.print()">
+      Print Results
+    </button>
+  </div>
+  {% else %}
+  <div class="alert alert-warning text-center">
+    No results found. Please complete the questionnaire first.
+  </div>
+  {% endif %}
+</div>
+
+<style>
+  .main-title {
+    font-family: "Playfair Display", serif;
+    font-size: 3rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 2rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    background: linear-gradient(45deg, #2c3e50, #34495e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: fadeInDown 1s ease-out;
+  }
+
+  .breed-name {
+    font-family: "Playfair Display", serif;
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #e74c3c;
+    margin-bottom: 1.5rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    background: linear-gradient(45deg, #e74c3c, #c0392b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: fadeInUp 1s ease-out;
+  }
+
+  .breed-details {
+    font-family: "Lato", sans-serif;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: #2c3e50;
+  }
+
+  .rating-label {
+    font-family: "Lato", sans-serif;
+    font-weight: 600;
+    font-size: 1rem;
+    color: #34495e;
+  }
+
+  .rating-value {
+    font-family: "Lato", sans-serif;
+    font-weight: 700;
+    color: #e74c3c;
+  }
+
+  .breed-details strong {
+    color: #e74c3c;
+  }
+
+  .breed-details div:last-child {
+    border-bottom: none;
+  }
+
+  .btn {
+    margin: 0 0.5rem;
+    min-width: 120px;
+  }
+
+  .breed-image-container {
+    margin: 2rem 0;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  img {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    max-width: 100%;
+    height: auto;
+  }
+
+  #imageLoading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+  }
+
+  .progress {
+    background-color: #f8f9fa;
+    border-radius: 10px;
+    overflow: hidden;
+    height: 25px;
+    margin-bottom: 0.5rem;
+    position: relative;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  .progress-bar {
+    height: 100%;
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: white;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
+    transition: width 1s ease-in-out;
+  }
+
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* colors for different rating levels  */
+  .progress-bar[aria-valuenow="1"] {
+    background-color: #dc3545;
+  }
+  .progress-bar[aria-valuenow="2"] {
+    background-color: #fd7e14;
+  }
+  .progress-bar[aria-valuenow="3"] {
+    background-color: #ffc107;
+  }
+  .progress-bar[aria-valuenow="4"] {
+    background-color: #20c997;
+  }
+  .progress-bar[aria-valuenow="5"] {
+    background-color: #0d6efd;
+  }
+
+  /* Remove any Bootstrap default styles that might interfere */
+  .progress,
+  .progress-bar {
+    -webkit-transition: none !important;
+    transition: none !important;
+  }
+
+  /* Ensure the progress bar container doesn't have padding */
+  .progress {
+    padding: 0 !important;
+  }
+
+  /* Ensure the progress bar fills its container */
+  .progress-bar {
+    margin: 0 !important;
+    border: none !important;
+  }
+
+  /* Social Share Styles */
+  .social-share {
+    border-top: 1px solid #e9ecef;
+    padding-top: 1.5rem;
+  }
+
+  .share-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+  }
+
+  .share-btn {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    font-size: 1.2rem;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .share-btn:hover {
+    transform: translateY(-3px) scale(1.1);
+    color: white;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .share-btn.facebook {
+    background-color: #1877f2;
+  }
+
+  .share-btn.linkedin {
+    background-color: #0077b5;
+  }
+
+  .share-btn.email {
+    background-color: #ea4335;
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const breedImage = document.getElementById("breedImage");
+    const imageLoading = document.getElementById("imageLoading");
+    const breedId = "{{ breed_scores[0].image_url }}";
+
+    function handleImageError() {
+      console.error("Error loading image");
+      imageLoading.innerHTML =
+        '<p class="text-muted">Unable to load cat image. Please try refreshing the page.</p>';
+      imageLoading.style.display = "block";
+      breedImage.style.display = "none";
+    }
+
+    // Fetch image from The Cat API
+    fetch(`https://api.thecatapi.com/v1/images/search?breed_ids=${breedId}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (data && data[0] && data[0].url) {
+          breedImage.src = data[0].url;
+          breedImage.onload = function () {
+            console.log("Image loaded successfully");
+            imageLoading.style.display = "none";
+            breedImage.style.display = "block";
+          };
+          breedImage.onerror = handleImageError;
+        } else {
+          handleImageError();
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching image:", error);
+        handleImageError();
+      });
+
+    // Start loading the image
+    imageLoading.style.display = "block";
+    breedImage.style.display = "none";
+  });
+</script>
+{% endblock %}

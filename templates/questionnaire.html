@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Cat Breed Questionnaire{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header text-center">
+                    <h2>Find Your Perfect Cat Breed</h2>
+                    <p class="text-muted">Answer these questions to discover the cat breed that best matches your lifestyle</p>
+                    <div class="progress mb-3">
+                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form id="questionnaireForm">
+                        <div id="questionsContainer">
+                            <!-- Questions will be loaded here dynamically -->
+                        </div>
+                        <div class="d-flex justify-content-between mt-4 mb-5">
+                            <button type="button" class="btn btn-secondary" id="prevBtn" style="display: none;">Previous</button>
+                            <button type="button" class="btn btn-primary" id="nextBtn">Next</button>
+                            <button type="submit" class="btn btn-success" id="submitBtn" style="display: none;">Get My Match</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        border: none;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        margin-bottom: 5rem;
+    }
+    .card-header {
+        background: transparent;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        padding: 1.5rem;
+    }
+    .question-container {
+        display: none;
+        margin-bottom: 2rem;
+        padding: 1.5rem;
+        border-radius: 8px;
+        background-color: #f8f9fa;
+    }
+    .question-container.active {
+        display: block;
+    }
+    .form-check {
+        margin: 0.5rem 0;
+    }
+    .btn {
+        padding: 0.8rem 1.5rem;
+        font-weight: 500;
+    }
+    .progress {
+        height: 10px;
+        border-radius: 5px;
+    }
+    .progress-bar {
+        background-color: #7eb8da;
+        transition: width 0.3s ease;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('questionnaireForm');
+    const questionsContainer = document.getElementById('questionsContainer');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const submitBtn = document.getElementById('submitBtn');
+    const progressBar = document.querySelector('.progress-bar');
+    
+    let currentAnswers = {};
+    let questions = [];
+    let currentQuestionIndex = 0;
+
+    // Fetch questions from the API
+    fetch('/api/questionnaire')
+        .then(response => response.json())
+        .then(data => {
+            questions = data.questions;
+            currentAnswers = data.current_answers || {};
+
+            // Create question containers
+            questions.forEach((q, index) => {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = 'question-container';
+                questionDiv.innerHTML = `
+                    <h4 class="mb-3">${index + 1}. ${q.question}</h4>
+                    <div class="answers">
+                        ${q.answers.map((answer, i) => `
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" 
+                                    name="q${index + 1}" 
+                                    id="q${index + 1}a${i}" 
+                                    value="${answer}"
+                                    ${currentAnswers[`q${index + 1}`] === answer ? 'checked' : ''}>
+                                <label class="form-check-label" for="q${index + 1}a${i}">
+                                    ${answer}
+                                </label>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                questionsContainer.appendChild(questionDiv);
+            });
+
+            // Show first question
+            showQuestion(0);
+            updateProgress();
+        })
+        .catch(error => console.error('Error:', error));
+
+    function showQuestion(index) {
+        // Hide all questions
+        document.querySelectorAll('.question-container').forEach(q => {
+            q.classList.remove('active');
+        });
+
+        // Show current question
+        document.querySelectorAll('.question-container')[index].classList.add('active');
+
+        // Update buttons
+        prevBtn.style.display = index === 0 ? 'none' : 'block';
+        nextBtn.style.display = index === questions.length - 1 ? 'none' : 'block';
+        submitBtn.style.display = index === questions.length - 1 ? 'block' : 'none';
+
+        // Update progress bar
+        updateProgress();
+    }
+
+    function updateProgress() {
+        const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
+        progressBar.style.width = `${progress}%`;
+    }
+
+    function saveCurrentAnswer() {
+        const currentQuestion = document.querySelector('.question-container.active');
+        const selected = currentQuestion.querySelector(`input[name="q${currentQuestionIndex + 1}"]:checked`);
+        if (selected) {
+            currentAnswers[`q${currentQuestionIndex + 1}`] = selected.value;
+        }
+    }
+
+    // Event Listeners
+    prevBtn.addEventListener('click', function() {
+        if (currentQuestionIndex > 0) {
+            saveCurrentAnswer();
+            currentQuestionIndex--;
+            showQuestion(currentQuestionIndex);
+        }
+    });
+
+    nextBtn.addEventListener('click', function() {
+        if (currentQuestionIndex < questions.length - 1) {
+            saveCurrentAnswer();
+            currentQuestionIndex++;
+            showQuestion(currentQuestionIndex);
+        }
+    });
+
+    // Handle form submission
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveCurrentAnswer();
+
+        // Send answers to server
+        fetch('/questionnaire', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({ answers: currentAnswers })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = data.redirect;
+            } else {
+                alert(data.message || 'An error occurred. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred. Please try again.');
+        });
+    });
+});
+</script>
+{% endblock %}
