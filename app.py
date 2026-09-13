@@ -4,6 +4,7 @@ from flask_cors import CORS
 from models import db, User, Question, Choice, CatBreed, UserResponse, connect_db, UserQuestionnaire, QuizResult
 from flask_wtf.csrf import CSRFProtect
 import os
+import secrets
 from dotenv import load_dotenv
 import requests
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -20,14 +21,18 @@ app = Flask(__name__)
 CORS(app)
 
 # Configuration
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'purrfect_paws_secret_key_2024_secure_xyz123')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://patsaya@localhost:5432/purrfect_paws')
+debug_enabled = os.getenv('FLASK_DEBUG', '').lower() in ('1', 'true', 'yes')
+secret_key = os.getenv('SECRET_KEY')
+if not secret_key and not debug_enabled:
+    raise RuntimeError('SECRET_KEY must be set when debug mode is disabled')
+app.config['SECRET_KEY'] = secret_key or secrets.token_hex(32)
+database_url = os.getenv('DATABASE_URL', 'postgresql://patsaya@localhost:5432/purrfect_paws')
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url.replace('postgres://', 'postgresql://', 1) if database_url.startswith('postgres://') else database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ECHO'] = True
 app.config['WTF_CSRF_ENABLED'] = True
-app.config['WTF_CSRF_SECRET_KEY'] = os.getenv('SECRET_KEY', 'purrfect_paws_secret_key_2024_secure_xyz123')
-app.config['DEBUG'] = True
-app.config['SESSION_COOKIE_SECURE'] = True  
+app.config['DEBUG'] = debug_enabled
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', '').lower() in ('1', 'true', 'yes')
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
@@ -234,6 +239,9 @@ def questionnaire():
             if not answers:
                 return jsonify({'success': False, 'message': 'No answers provided'}), 400
 
+            if CatBreed.query.count() == 0:
+                return jsonify({'success': False, 'message': 'No cat breeds are available yet'}), 503
+
             # Create keyword counter from answers
             keywords = []
             for answer in answers.values():
@@ -421,39 +429,24 @@ def init_db():
         # Create tables if they don't exist
         db.create_all()
         
-        # Always fetch breeds from API to ensure we have the latest data
-        logger.debug("Fetching cat breeds from API...")
+        # Existing breed IDs must stay stable for saved results
+        logger.debug("Checking cat breed data...")
         try:
-            # Clear related tables first to avoid foreign key violations
-            UserQuestionnaire.query.delete()
-            QuizResult.query.delete()
-            UserResponse.query.delete()
-            db.session.commit()
-            
-            # Clear existing breeds
-            CatBreed.query.delete()
-            db.session.commit()
-            
-            # Fetch breeds from API
-            fetch_cat_breeds()
+            # Keep saved users and results; fetch only for an empty breed table.
+            if CatBreed.query.count() == 0 and CAT_API_KEY:
+                fetch_cat_breeds()
             
             # Verify breeds were fetched
             breed_count = CatBreed.query.count()
-            logger.info(f"Successfully fetched {breed_count} cat breeds from API")
+            logger.info(f"Cat breeds available: {breed_count}")
             
             if breed_count == 0:
-                logger.error("No breeds were fetched from the API!")
-                raise Exception("Failed to fetch cat breeds from API")
+                logger.warning("No breeds are available yet; run breed initialization after setting CAT_API_KEY")
                 
         except Exception as e:
             logger.error(f"Failed to fetch cat breeds: {str(e)}")
             raise
         
-        # Verify the database setup
-        if not verify_db_setup():
-            logger.error("Database setup verification failed!")
-            raise Exception("Database setup verification failed")
-            
         logger.info("Database initialization completed successfully")
 
 def fetch_cat_breeds():
@@ -471,7 +464,7 @@ def fetch_cat_breeds():
         logger.info("Starting to fetch cat breeds from The Cat API...")
         
         # Fetch all breeds
-        response = requests.get("https://api.thecatapi.com/v1/breeds", headers=headers)
+        response = requests.get("https://api.thecatapi.com/v1/breeds", headers=headers, timeout=15)
         response.raise_for_status()
         breeds_data = response.json()
         
@@ -480,10 +473,6 @@ def fetch_cat_breeds():
             raise ValueError("No breeds data received from API")
             
         logger.info(f"Successfully fetched {len(breeds_data)} breeds from The Cat API")
-        
-        # Clear existing breeds first
-        CatBreed.query.delete()
-        db.session.commit()
         
         # Process each breed
         for breed_data in breeds_data:
@@ -527,12 +516,16 @@ def fetch_cat_breeds():
                 breed_id = breed_data['id']
                 
                 # Create new breed with breed ID as image_url
+                existing = CatBreed.query.filter_by(name=breed_data['name']).first()
+                if existing:
+                    existing.attributes = "\n".join(attributes)
+                    existing.image_url = breed_id
+                    continue
                 new_breed = CatBreed(
                     name=breed_data['name'],
                     attributes="\n".join(attributes),
                     image_url=breed_id  # Store the breed ID for image fetching
                 )
-                
                 db.session.add(new_breed)
                 logger.debug(f"Added new breed: {breed_data['name']} with ID: {breed_id}")
                 
@@ -584,5 +577,5 @@ def check_cat_breeds():
 if __name__ == '__main__':
     with app.app_context():
         init_db()
-    app.run(debug=True, port=PORT, host='0.0.0.0')
+    app.run(port=PORT, host='0.0.0.0')
   

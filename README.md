@@ -60,12 +60,14 @@ pip install -r requirements.txt
 DATABASE_URL=postgresql:///purrfect_paws
 SECRET_KEY=your-secret-key
 CAT_API_KEY=your-cat-api-key  # Get your API key from https://thecatapi.com/
+SESSION_COOKIE_SECURE=0  # Use 1 when deployed with HTTPS
+FLASK_DEBUG=0
 ```
 
 5. Initialize the database:
 
 ```bash
-python -c "from app import init_db; init_db()"
+python init_db.py
 ```
 
 ## 🏃‍♂️ Running the Application
@@ -87,7 +89,7 @@ http://localhost:5000
 The application includes unit tests to verify core functionality:
 
 ```bash
-python -m unittest test_app.py -v
+python -m unittest discover -v
 ```
 
 ## 📁 Project Structure

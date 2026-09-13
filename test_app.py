@@ -12,8 +12,17 @@ Note: These tests use a test database to avoid affecting the production database
 """
 
 import unittest
-from app import app, db
-from models import User, Question, Choice, CatBreed, UserQuestionnaire, UserResponse
+import os
+import tempfile
+from unittest.mock import patch
+
+# Choose an isolated database before Flask-SQLAlchemy is initialized.
+_test_directory = tempfile.TemporaryDirectory()
+os.environ['DATABASE_URL'] = 'sqlite:///' + os.path.join(_test_directory.name, 'test.sqlite3')
+os.environ['SECRET_KEY'] = 'test-only-secret'
+os.environ['SESSION_COOKIE_SECURE'] = '0'
+from app import app, db, init_db
+from models import User, Question, Choice, CatBreed, UserQuestionnaire, UserResponse, QuizResult
 from werkzeug.security import generate_password_hash
 
 class TestPurrfectPaws(unittest.TestCase):
@@ -23,7 +32,6 @@ class TestPurrfectPaws(unittest.TestCase):
         """Set up test database and create test client"""
         # Configure test database
         app.config['TESTING'] = True
-        app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql:///purrfect_paws_test'
         app.config['WTF_CSRF_ENABLED'] = False  # Disable CSRF protection during testing
         self.client = app.test_client()
         
@@ -143,6 +151,7 @@ class TestPurrfectPaws(unittest.TestCase):
         
         response = self.client.post('/questionnaire', json=test_answers, follow_redirects=True)
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json['success'])
         
         # Verify questionnaire was saved
         with app.app_context():
@@ -181,6 +190,30 @@ class TestPurrfectPaws(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Your Perfect Cat Breed Match', response.data)
     
+    def test_initialization_preserves_existing_data(self):
+        """Starting again must retain saved accounts, matches, and breed IDs."""
+        with app.app_context():
+            breed = CatBreed.query.first()
+            user = User(username='saved', email='saved@example.com')
+            user.set_password('testpass123')
+            db.session.add(user)
+            db.session.flush()
+            questionnaire = UserQuestionnaire(
+                user_id=user.id, answers={'q1': 'Apartment'}, completed=True,
+                matched_breed_id=breed.id)
+            result = QuizResult(user_id=user.id, breed_id=breed.id)
+            db.session.add_all([questionnaire, result])
+            db.session.commit()
+            ids = (breed.id, user.id, questionnaire.id, result.id)
+
+            with patch('app.fetch_cat_breeds') as fetch:
+                init_db()
+                fetch.assert_not_called()
+            self.assertIsNotNone(CatBreed.query.get(ids[0]))
+            self.assertIsNotNone(User.query.get(ids[1]))
+            self.assertIsNotNone(UserQuestionnaire.query.get(ids[2]))
+            self.assertIsNotNone(QuizResult.query.get(ids[3]))
+
     def test_logout(self):
         """Test user logout functionality"""
         # Create and login test user

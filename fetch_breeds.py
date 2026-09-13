@@ -28,7 +28,7 @@ def fetch_cat_breeds():
         logger.info("Starting to fetch cat breeds from The Cat API...")
         
         # Fetch all breeds
-        response = requests.get("https://api.thecatapi.com/v1/breeds", headers=headers)
+        response = requests.get("https://api.thecatapi.com/v1/breeds", headers=headers, timeout=15)
         response.raise_for_status()
         breeds_data = response.json()
         
@@ -39,7 +39,7 @@ def fetch_cat_breeds():
         logger.info(f"Successfully fetched {len(breeds_data)} breeds from The Cat API")
         
         # Get all existing breeds
-        breed_map = {breed.image_url: breed for breed in CatBreed.query.all()}
+        breed_map = {breed.name: breed for breed in CatBreed.query.all()}
         
         # Process each breed from the API
         for breed_data in breeds_data:
@@ -82,36 +82,21 @@ def fetch_cat_breeds():
                 # Get breed ID and reference image
                 breed_id = breed_data['id']
                 
-                # Fetch image URL for this breed
-                image_response = requests.get(
-                    f"https://api.thecatapi.com/v1/images/search?breed_ids={breed_id}&limit=1",
-                    headers=headers
-                )
-                image_response.raise_for_status()
-                image_data = image_response.json()
-                
-                if not image_data or not image_data[0].get('url'):
-                    logger.warning(f"No image found for breed {breed_data['name']}, using reference image")
-                    image_url = breed_data.get('reference_image_id', breed_id)
-                else:
-                    image_url = image_data[0]['url']
-                    logger.debug(f"Found image URL for {breed_data['name']}: {image_url}")
-                
                 # Update existing breed or create new one
-                if breed_id in breed_map:
-                    breed = breed_map[breed_id]
+                if breed_data['name'] in breed_map:
+                    breed = breed_map[breed_data['name']]
                     breed.name = breed_data['name']
                     breed.attributes = "\n".join(attributes)
-                    breed.image_url = image_url
+                    breed.image_url = breed_id
                     logger.debug(f"Updated existing breed: {breed_data['name']} with ID: {breed_id}")
                 else:
                     new_breed = CatBreed(
                         name=breed_data['name'],
                         attributes="\n".join(attributes),
-                        image_url=image_url
+                        image_url=breed_id
                     )
                     db.session.add(new_breed)
-                    breed_map[breed_id] = new_breed
+                    breed_map[breed_data['name']] = new_breed
                     logger.debug(f"Added new breed: {breed_data['name']} with ID: {breed_id}")
                 
             except Exception as e:

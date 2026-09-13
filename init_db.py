@@ -14,8 +14,11 @@ def init_db():
         if CatBreed.query.first() is None:
             # Load cat breeds from The Cat API
             CAT_API_KEY = os.getenv('CAT_API_KEY')
+            if not CAT_API_KEY:
+                print('CAT_API_KEY is required to load cat breeds; existing tables are untouched.')
+                return
             headers = {'x-api-key': CAT_API_KEY}
-            response = requests.get('https://api.thecatapi.com/v1/breeds', headers=headers)
+            response = requests.get('https://api.thecatapi.com/v1/breeds', headers=headers, timeout=15)
             
             if response.status_code == 200:
                 breeds = response.json()
@@ -41,7 +44,7 @@ def init_db():
                     new_breed = CatBreed(
                         name=breed.get('name', ''),
                         attributes=attributes,
-                        image_url=breed.get('image', {}).get('url', '') if breed.get('image') else None
+                        image_url=breed.get('id')
                     )
                     db.session.add(new_breed)
                 

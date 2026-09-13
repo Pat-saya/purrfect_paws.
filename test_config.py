@@ -6,13 +6,15 @@ It ensures that tests use a separate test database and don't affect the producti
 """
 
 import os
+import tempfile
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
 # Test database configuration
-TEST_DATABASE_URL = 'postgresql:///purrfect_paws_test'
+_test_directory = tempfile.TemporaryDirectory()
+TEST_DATABASE_URL = 'sqlite:///' + os.path.join(_test_directory.name, 'test.sqlite3')
 
 # Test configuration
 TEST_CONFIG = {
