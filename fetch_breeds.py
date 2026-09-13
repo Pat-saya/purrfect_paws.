@@ -1,12 +1,11 @@
 from dotenv import load_dotenv
 import os
 import requests
-from models import db, CatBreed
+from models import db, Breed
 from app import app
 import logging
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 def fetch_cat_breeds():
@@ -39,7 +38,7 @@ def fetch_cat_breeds():
         logger.info(f"Successfully fetched {len(breeds_data)} breeds from The Cat API")
         
         # Get all existing breeds
-        breed_map = {breed.name: breed for breed in CatBreed.query.all()}
+        breed_map = {breed.api_breed_id: breed for breed in Breed.query.filter_by(species='cat').all()}
         
         # Process each breed from the API
         for breed_data in breeds_data:
@@ -81,26 +80,32 @@ def fetch_cat_breeds():
                 
                 # Get breed ID and reference image
                 breed_id = breed_data['id']
+                if not breed_id or not breed_data.get('name'):
+                    raise ValueError('missing breed ID or name')
+                image_url = (breed_data.get('image') or {}).get('url')
                 
                 # Update existing breed or create new one
-                if breed_data['name'] in breed_map:
-                    breed = breed_map[breed_data['name']]
+                if breed_id in breed_map:
+                    breed = breed_map[breed_id]
                     breed.name = breed_data['name']
                     breed.attributes = "\n".join(attributes)
-                    breed.image_url = breed_id
+                    if image_url:
+                        breed.image_url = image_url
                     logger.debug(f"Updated existing breed: {breed_data['name']} with ID: {breed_id}")
                 else:
-                    new_breed = CatBreed(
+                    new_breed = Breed(
                         name=breed_data['name'],
                         attributes="\n".join(attributes),
-                        image_url=breed_id
+                        species='cat',
+                        api_breed_id=breed_id,
+                        image_url=image_url
                     )
                     db.session.add(new_breed)
-                    breed_map[breed_data['name']] = new_breed
+                    breed_map[breed_id] = new_breed
                     logger.debug(f"Added new breed: {breed_data['name']} with ID: {breed_id}")
                 
             except Exception as e:
-                logger.error(f"Error processing breed {breed_data.get('name', 'unknown')}: {str(e)}")
+                logger.error("Rejected cat breed API record id=%r: %s", breed_data.get('id'), e)
                 continue
         
         # Commit all changes
@@ -108,7 +113,7 @@ def fetch_cat_breeds():
         logger.info(f"Successfully updated/added breeds to database")
         
         # Verify the number of breeds in the database
-        breed_count = CatBreed.query.count()
+        breed_count = Breed.query.filter_by(species='cat').count()
         logger.info(f"Current number of breeds in database: {breed_count}")
         
         if breed_count == 0:
@@ -125,4 +130,4 @@ def fetch_cat_breeds():
 if __name__ == '__main__':
     with app.app_context():
         # Fetch breeds
-        fetch_cat_breeds() 
+        fetch_cat_breeds()

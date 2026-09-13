@@ -1,18 +1,17 @@
 from flask import Flask, request, jsonify, render_template, flash, redirect, url_for
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from flask_cors import CORS
-from models import db, User, Question, Choice, CatBreed, UserResponse, connect_db, UserQuestionnaire, QuizResult
+from models import db, User, Question, Choice, Breed, UserResponse, connect_db, UserQuestionnaire, QuizResult
 from flask_wtf.csrf import CSRFProtect
 import os
 import secrets
 from dotenv import load_dotenv
-import requests
+
 from werkzeug.security import generate_password_hash, check_password_hash
 from forms_module import RegistrationForm, LoginForm
 
 import logging
 from sqlalchemy import text
-from collections import Counter
 
 # Load environment variables first
 load_dotenv()
@@ -29,7 +28,7 @@ app.config['SECRET_KEY'] = secret_key or secrets.token_hex(32)
 database_url = os.getenv('DATABASE_URL', 'postgresql://patsaya@localhost:5432/purrfect_paws')
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url.replace('postgres://', 'postgresql://', 1) if database_url.startswith('postgres://') else database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ECHO'] = True
+app.config['SQLALCHEMY_ECHO'] = os.getenv('SQLALCHEMY_ECHO', '').lower() in ('1', 'true', 'yes')
 app.config['WTF_CSRF_ENABLED'] = True
 app.config['DEBUG'] = debug_enabled
 app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', '').lower() in ('1', 'true', 'yes')
@@ -54,7 +53,7 @@ csrf = CSRFProtect(app)
 CAT_API_KEY = os.getenv('CAT_API_KEY')
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG if debug_enabled else logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Questions data
@@ -239,7 +238,8 @@ def questionnaire():
             if not answers:
                 return jsonify({'success': False, 'message': 'No answers provided'}), 400
 
-            if CatBreed.query.count() == 0:
+            breeds = Breed.query.filter_by(species='cat').all()
+            if not breeds:
                 return jsonify({'success': False, 'message': 'No cat breeds are available yet'}), 503
 
             # Create keyword counter from answers
@@ -247,12 +247,8 @@ def questionnaire():
             for answer in answers.values():
                 keywords.extend(answer.lower().split())
 
-            keyword_counts = Counter(keywords)
-            
-            # Get all breeds
-            breeds = CatBreed.query.all()
             best_match = None
-            best_score = 0
+            best_score = -1
             breed_scores = []
 
             for breed in breeds:
@@ -279,12 +275,16 @@ def questionnaire():
             # Sort breeds by score
             breed_scores.sort(key=lambda x: x['score'], reverse=True)
 
+            if best_match is None:
+                return jsonify({'success': False, 'message': 'No cat breed match is available'}), 503
+
             # Save questionnaire
             questionnaire = UserQuestionnaire(
                 user_id=current_user.id,
                 answers=answers,
+                species='cat',
                 completed=True,
-                matched_breed_id=best_match.id if best_match else None
+                matched_breed_id=best_match.id
             )
             db.session.add(questionnaire)
             db.session.commit()
@@ -309,10 +309,11 @@ def questionnaire():
 @login_required
 def get_questionnaire():
     questionnaire = UserQuestionnaire.query.filter_by(
-        user_id=current_user.id, completed=False
+        user_id=current_user.id, completed=False, species='cat'
     ).order_by(UserQuestionnaire.created_at.desc()).first()
     
     return jsonify({
+        'species': 'cat',
         'questions': QUESTIONS,
         'current_answers': questionnaire.answers if questionnaire else {}
     })
@@ -320,53 +321,26 @@ def get_questionnaire():
 @app.route('/results')
 @login_required
 def results():
-    """Display the matched cat breeds based on questionnaire answers."""
+    """Display the saved breed match for the completed questionnaire."""
     # Get the most recent completed questionnaire
     questionnaire = UserQuestionnaire.query.filter_by(
         user_id=current_user.id, completed=True
     ).order_by(UserQuestionnaire.created_at.desc()).first()
     
-    if not questionnaire or not questionnaire.matched_breed_id:
+    if not questionnaire:
         flash('Please complete the questionnaire first.', 'warning')
+        return redirect(url_for('questionnaire'))
+    if not questionnaire.matched_breed_id:
+        flash('No matched breed is available for this questionnaire.', 'warning')
         return redirect(url_for('questionnaire'))
     
     # Get the matched breed
-    breed = CatBreed.query.get(questionnaire.matched_breed_id)
-    if not breed:
-        flash('Error finding matched breed. Please try the questionnaire again.', 'error')
+    breed = db.session.get(Breed, questionnaire.matched_breed_id)
+    if not breed or breed.species != questionnaire.species:
+        flash('The saved breed match is missing or has the wrong species.', 'error')
         return redirect(url_for('questionnaire'))
-    
-    # Get all breeds and calculate scores
-    breeds = CatBreed.query.all()
-    breed_scores = []
-    
-    # Create keyword counter from answers
-    keywords = []
-    for answer in questionnaire.answers.values():
-        keywords.extend(answer.lower().split())
-    
-    keyword_counts = Counter(keywords)
-    
-    for b in breeds:
-        score = 0
-        attributes = b.attributes.lower()
-        
-        # Match keywords against breed attributes
-        for keyword in keywords:
-            if keyword in attributes:
-                score += 1
-        
-        breed_scores.append({
-            'name': b.name,
-            'score': score,
-            'attributes': b.attributes,
-            'image_url': b.image_url
-        })
-    
-    # Sort breeds by score
-    breed_scores.sort(key=lambda x: x['score'], reverse=True)
-    
-    return render_template('results.html', breed_scores=breed_scores[:1])  # Show only the best match
+
+    return render_template('results.html', breed_scores=[breed], species=questionnaire.species)
 
 @app.errorhandler(404)
 def not_found_error(error):
@@ -403,9 +377,9 @@ def verify_db_setup():
                 logger.error("Users table does not exist!")
                 return False
 
-            # Check if cat_breeds table exists and has data
-            if 'cat_breeds' in tables:
-                breed_count = CatBreed.query.count()
+            # Check if unified breeds table exists and has cat data
+            if 'breeds' in tables:
+                breed_count = Breed.query.filter_by(species='cat').count()
                 logger.debug(f"Number of cat breeds in database: {breed_count}")
                 
                 if breed_count == 0:
@@ -433,11 +407,11 @@ def init_db():
         logger.debug("Checking cat breed data...")
         try:
             # Keep saved users and results; fetch only for an empty breed table.
-            if CatBreed.query.count() == 0 and CAT_API_KEY:
+            if Breed.query.filter_by(species='cat').count() == 0 and CAT_API_KEY:
                 fetch_cat_breeds()
             
             # Verify breeds were fetched
-            breed_count = CatBreed.query.count()
+            breed_count = Breed.query.filter_by(species='cat').count()
             logger.info(f"Cat breeds available: {breed_count}")
             
             if breed_count == 0:
@@ -450,121 +424,20 @@ def init_db():
         logger.info("Database initialization completed successfully")
 
 def fetch_cat_breeds():
-    """Fetch cat breeds from The Cat API and store them in the database."""
-    try:
-        if not CAT_API_KEY:
-            logger.error("CAT_API_KEY is not set!")
-            raise ValueError("CAT_API_KEY is not set")
-
-        headers = {
-            "x-api-key": CAT_API_KEY,
-            "Accept": "application/json"
-        }
-        
-        logger.info("Starting to fetch cat breeds from The Cat API...")
-        
-        # Fetch all breeds
-        response = requests.get("https://api.thecatapi.com/v1/breeds", headers=headers, timeout=15)
-        response.raise_for_status()
-        breeds_data = response.json()
-        
-        if not breeds_data:
-            logger.error("No breeds data received from API!")
-            raise ValueError("No breeds data received from API")
-            
-        logger.info(f"Successfully fetched {len(breeds_data)} breeds from The Cat API")
-        
-        # Process each breed
-        for breed_data in breeds_data:
-            try:
-                # Create detailed attributes string
-                attributes = []
-                if breed_data.get('temperament'):
-                    attributes.append(f"Temperament: {breed_data['temperament']}")
-                if breed_data.get('description'):
-                    attributes.append(f"Description: {breed_data['description']}")
-                if breed_data.get('origin'):
-                    attributes.append(f"Origin: {breed_data['origin']}")
-                if breed_data.get('life_span'):
-                    attributes.append(f"Life Span: {breed_data['life_span']} years")
-                if breed_data.get('weight'):
-                    attributes.append(f"Weight: {breed_data['weight'].get('metric', 'N/A')} kg")
-                if breed_data.get('adaptability'):
-                    attributes.append(f"Adaptability: {breed_data['adaptability']}/5")
-                if breed_data.get('child_friendly'):
-                    attributes.append(f"Child Friendly: {breed_data['child_friendly']}/5")
-                if breed_data.get('dog_friendly'):
-                    attributes.append(f"Dog Friendly: {breed_data['dog_friendly']}/5")
-                if breed_data.get('energy_level'):
-                    attributes.append(f"Energy Level: {breed_data['energy_level']}/5")
-                if breed_data.get('grooming'):
-                    attributes.append(f"Grooming: {breed_data['grooming']}/5")
-                if breed_data.get('health_issues'):
-                    attributes.append(f"Health Issues: {breed_data['health_issues']}/5")
-                if breed_data.get('intelligence'):
-                    attributes.append(f"Intelligence: {breed_data['intelligence']}/5")
-                if breed_data.get('shedding_level'):
-                    attributes.append(f"Shedding Level: {breed_data['shedding_level']}/5")
-                if breed_data.get('social_needs'):
-                    attributes.append(f"Social Needs: {breed_data['social_needs']}/5")
-                if breed_data.get('stranger_friendly'):
-                    attributes.append(f"Stranger Friendly: {breed_data['stranger_friendly']}/5")
-                if breed_data.get('vocalisation'):
-                    attributes.append(f"Vocalisation: {breed_data['vocalisation']}/5")
-                
-                # Get breed ID for image fetching
-                breed_id = breed_data['id']
-                
-                # Create new breed with breed ID as image_url
-                existing = CatBreed.query.filter_by(name=breed_data['name']).first()
-                if existing:
-                    existing.attributes = "\n".join(attributes)
-                    existing.image_url = breed_id
-                    continue
-                new_breed = CatBreed(
-                    name=breed_data['name'],
-                    attributes="\n".join(attributes),
-                    image_url=breed_id  # Store the breed ID for image fetching
-                )
-                db.session.add(new_breed)
-                logger.debug(f"Added new breed: {breed_data['name']} with ID: {breed_id}")
-                
-            except Exception as e:
-                logger.error(f"Error processing breed {breed_data.get('name', 'unknown')}: {str(e)}")
-                continue
-        
-        # Commit all breeds
-        db.session.commit()
-        logger.info(f"Successfully committed {len(breeds_data)} breeds to database")
-        
-        # Verify the number of breeds in the database
-        breed_count = CatBreed.query.count()
-        logger.info(f"Current number of breeds in database: {breed_count}")
-        
-        if breed_count == 0:
-            logger.error("No breeds were added to the database!")
-            raise Exception("Failed to add breeds to database")
-            
-        if breed_count != len(breeds_data):
-            logger.error(f"Warning: Number of breeds in database ({breed_count}) does not match number fetched from API ({len(breeds_data)})")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error fetching cat breeds: {str(e)}")
-        db.session.rollback()
-        raise
+    """Fetch cat breeds through the shared, non-destructive importer."""
+    from fetch_breeds import fetch_cat_breeds as fetch
+    return fetch()
 
 def check_cat_breeds():
     """Check the number and details of cat breeds in the database"""
     try:
         with app.app_context():
             # Get total count of cat breeds
-            breed_count = CatBreed.query.count()
+            breed_count = Breed.query.filter_by(species='cat').count()
             logger.debug(f"Total number of cat breeds in database: {breed_count}")
             
             # Get all cat breeds
-            breeds = CatBreed.query.all()
+            breeds = Breed.query.filter_by(species='cat').all()
             logger.debug("Cat breeds in database:")
             for breed in breeds:
                 logger.debug(f"- {breed.name}: {breed.attributes}")
@@ -578,4 +451,3 @@ if __name__ == '__main__':
     with app.app_context():
         init_db()
     app.run(port=PORT, host='0.0.0.0')
-  
