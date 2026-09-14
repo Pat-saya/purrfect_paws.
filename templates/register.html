@@ -1,117 +1,70 @@
-{% extends "base.html" %} {% block title %}Register{% endblock %} {% block
-content %}
-<div class="container mt-5">
-  <div class="row justify-content-center">
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-header text-center">
-          <h2>Register</h2>
+{% extends "base.html" %}
+
+{% block title %}Create Account | Purrfect Paws{% endblock %}
+
+{% block content %}
+<main class="auth-page">
+  <div class="container auth-shell">
+    <div class="auth-layout">
+      <aside class="auth-story auth-story-register" aria-labelledby="register-story-title">
+        <div class="auth-story-top"><i class="fas fa-paw" aria-hidden="true"></i> COLLARS, NOSES &amp; PAWS</div>
+        <div class="auth-story-copy">
+          <span class="auth-story-icon" aria-hidden="true"><i class="fas fa-cat"></i><i class="fas fa-dog"></i></span>
+          <h2 id="register-story-title">Make room for a new connection.</h2>
+          <p>Choose cat or dog, share a little about your lifestyle, and discover a breed to explore.</p>
         </div>
-        <div class="card-body">
-          <form
-            method="POST"
-            action="{{ url_for('register') }}"
-            id="registerForm"
-          >
-            {{ form.csrf_token }}
-            <div class="mb-3">
-              {{ form.username.label(class="form-label") }} {{
-              form.username(class="form-control" + (" is-invalid" if
-              form.username.errors else "")) }} {% if form.username.errors %}
-              <div class="invalid-feedback">
-                {% for error in form.username.errors %} {{ error }} {% endfor %}
-              </div>
-              {% endif %}
+        <span class="auth-story-bottom">Your next chapter starts with curiosity.</span>
+      </aside>
+
+      <section class="auth-form-panel" aria-labelledby="register-title">
+        <p class="auth-eyebrow">JOIN THE PACK</p>
+        <h1 id="register-title">Create your account</h1>
+        <p class="auth-intro">A few details, then you can start finding your cat or dog match.</p>
+
+        <form method="POST" action="{{ url_for('register') }}" id="registerForm" class="auth-form">
+          {{ form.hidden_tag() }}
+          <div class="auth-field">
+            {{ form.username.label(class="form-label") }}
+            {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else ""), autocomplete="username", **({'aria-describedby': 'register-username-error', 'aria-invalid': 'true'} if form.username.errors else {})) }}
+            {% if form.username.errors %}
+            <div id="register-username-error" class="invalid-feedback" role="alert">
+              {% for error in form.username.errors %}<span>{{ error }}</span>{% endfor %}
             </div>
-            <div class="mb-3">
-              {{ form.email.label(class="form-label") }} {{
-              form.email(class="form-control" + (" is-invalid" if
-              form.email.errors else "")) }} {% if form.email.errors %}
-              <div class="invalid-feedback">
-                {% for error in form.email.errors %} {{ error }} {% endfor %}
-              </div>
-              {% endif %}
-            </div>
-            <div class="mb-3">
-              {{ form.password.label(class="form-label") }} {{
-              form.password(class="form-control" + (" is-invalid" if
-              form.password.errors else "")) }} {% if form.password.errors %}
-              <div class="invalid-feedback">
-                {% for error in form.password.errors %} {{ error }} {% endfor %}
-              </div>
-              {% endif %}
-            </div>
-            <div class="mb-3">
-              {{ form.confirm_password.label(class="form-label") }} {{
-              form.confirm_password(class="form-control" + (" is-invalid" if
-              form.confirm_password.errors else "")) }} {% if
-              form.confirm_password.errors %}
-              <div class="invalid-feedback">
-                {% for error in form.confirm_password.errors %} {{ error }} {%
-                endfor %}
-              </div>
-              {% endif %}
-            </div>
-            <div class="d-grid gap-2">
-              {{ form.submit(class="btn btn-primary") }}
-            </div>
-          </form>
-          <div class="text-center mt-3">
-            <p>
-              Already have an account?
-              <a href="{{ url_for('login') }}" class="btn btn-link"
-                >Login here</a
-              >
-            </p>
+            {% endif %}
           </div>
-        </div>
-      </div>
+          <div class="auth-field">
+            {{ form.email.label(class="form-label") }}
+            {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""), autocomplete="email", **({'aria-describedby': 'register-email-error', 'aria-invalid': 'true'} if form.email.errors else {})) }}
+            {% if form.email.errors %}
+            <div id="register-email-error" class="invalid-feedback" role="alert">
+              {% for error in form.email.errors %}<span>{{ error }}</span>{% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          <div class="auth-field">
+            {{ form.password.label(class="form-label") }}
+            {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""), autocomplete="new-password", **({'aria-describedby': 'register-password-error', 'aria-invalid': 'true'} if form.password.errors else {})) }}
+            {% if form.password.errors %}
+            <div id="register-password-error" class="invalid-feedback" role="alert">
+              {% for error in form.password.errors %}<span>{{ error }}</span>{% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          <div class="auth-field">
+            {{ form.confirm_password.label(class="form-label") }}
+            {{ form.confirm_password(class="form-control" + (" is-invalid" if form.confirm_password.errors else ""), autocomplete="new-password", **({'aria-describedby': 'register-confirm-password-error', 'aria-invalid': 'true'} if form.confirm_password.errors else {})) }}
+            {% if form.confirm_password.errors %}
+            <div id="register-confirm-password-error" class="invalid-feedback" role="alert">
+              {% for error in form.confirm_password.errors %}<span>{{ error }}</span>{% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          {{ form.submit(class="btn auth-submit") }}
+        </form>
+
+        <p class="auth-switch">Already have an account? <a href="{{ url_for('login') }}">Log in <i class="fas fa-arrow-right" aria-hidden="true"></i></a></p>
+      </section>
     </div>
   </div>
-</div>
-
-<style>
-  .card {
-    border: none;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-  }
-
-  .card-header {
-    background: transparent;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    padding: 1.5rem;
-  }
-
-  .form-label {
-    font-weight: 500;
-    color: #2c3e50;
-  }
-
-  .form-control {
-    padding: 0.8rem;
-    border-radius: 8px;
-    border: 1px solid #ddd;
-    transition: all 0.3s ease;
-  }
-
-  .form-control:focus {
-    border-color: #7eb8da;
-    box-shadow: 0 0 0 0.2rem rgba(126, 184, 218, 0.25);
-  }
-
-  .btn-primary {
-    padding: 0.8rem;
-    font-weight: 500;
-  }
-
-  a {
-    color: #7eb8da;
-    text-decoration: none;
-    transition: color 0.3s ease;
-  }
-
-  a:hover {
-    color: #6ba7c9;
-  }
-</style>
+</main>
 {% endblock %}
