@@ -21,6 +21,8 @@ _test_directory = tempfile.TemporaryDirectory()
 os.environ['DATABASE_URL'] = 'sqlite:///' + os.path.join(_test_directory.name, 'test.sqlite3')
 os.environ['SECRET_KEY'] = 'test-only-secret'
 os.environ['SESSION_COOKIE_SECURE'] = '0'
+os.environ['CAT_API_KEY'] = ''
+os.environ['DOG_API_KEY'] = ''
 from app import app, db, init_db
 from models import User, Question, Choice, Breed, UserQuestionnaire, UserResponse, QuizResult
 from werkzeug.security import generate_password_hash
@@ -145,6 +147,78 @@ class TestPurrfectPaws(unittest.TestCase):
             self.assertEqual(updated.name, 'Renamed Cat')
             self.assertEqual(updated.image_url, 'https://example.com/new-cat.jpg')
             self.assertEqual(Breed.query.filter_by(species='dog', api_breed_id='dog1').one().name, 'Existing Dog')
+
+    def test_dog_import_creates_updates_and_skips_invalid_records(self):
+        from fetch_breeds import fetch_dog_breeds
+        with app.app_context():
+            cat = Breed.query.filter_by(species='cat', api_breed_id='test_breed').one()
+            cat_id = cat.id
+            records = [
+                {'id': 42, 'name': 'First Dog', 'temperament': 'Friendly',
+                 'bred_for': 'Companionship', 'breed_group': 'Toy', 'origin': 'France',
+                 'life_span': '10 - 12 years', 'weight': {'metric': '5 - 8'},
+                 'height': {'metric': '20 - 30'},
+                 'image': {'url': 'https://example.com/dog.jpg'}},
+                {'id': 'test_breed', 'name': 'Shared ID Dog'},
+                {'id': None, 'name': 'Invalid Dog'},
+                {'id': 99, 'name': ' '},
+            ]
+            with patch.dict(os.environ, {'DOG_API_KEY': 'test-key'}), patch('fetch_breeds.requests.get') as get:
+                get.return_value.json.return_value = records
+                with self.assertLogs('fetch_breeds', level='WARNING') as logs:
+                    fetch_dog_breeds()
+                self.assertEqual(get.call_count, 1)
+                self.assertEqual(get.call_args.args[0], 'https://api.thedogapi.com/v1/breeds')
+                self.assertEqual(get.call_args.kwargs['timeout'], 15)
+                get.return_value.raise_for_status.assert_called_once()
+                self.assertTrue(any('id=None' in message for message in logs.output))
+                self.assertTrue(any('id=99' in message for message in logs.output))
+                dog = Breed.query.filter_by(species='dog', api_breed_id='42').one()
+                dog_id = dog.id
+                self.assertEqual(dog.image_url, 'https://example.com/dog.jpg')
+                for detail in ('Temperament: Friendly', 'Bred For: Companionship',
+                               'Breed Group: Toy', 'Origin: France', 'Life Span: 10 - 12 years',
+                               'Weight: 5 - 8 kg', 'Height: 20 - 30 cm'):
+                    self.assertIn(detail, dog.attributes)
+                records[0]['name'] = 'Updated Dog'
+                fetch_dog_breeds()
+            self.assertEqual(Breed.query.filter_by(species='dog').count(), 2)
+            self.assertEqual(Breed.query.filter_by(species='dog', api_breed_id='42').one().id, dog_id)
+            self.assertEqual(Breed.query.filter_by(species='dog', api_breed_id='42').one().name, 'Updated Dog')
+            self.assertEqual(Breed.query.filter_by(species='cat', api_breed_id='test_breed').one().id, cat_id)
+            self.assertEqual(Breed.query.filter_by(species='cat', api_breed_id='test_breed').one().name, 'Test Breed')
+            self.assertIsNotNone(Breed.query.filter_by(species='dog', api_breed_id='test_breed').first())
+
+    def test_dog_import_rolls_back_on_request_error(self):
+        from fetch_breeds import fetch_dog_breeds
+        import requests
+        with app.app_context(), patch.dict(os.environ, {'DOG_API_KEY': 'test-key'}), patch('fetch_breeds.requests.get') as get:
+            get.return_value.raise_for_status.side_effect = requests.HTTPError('API unavailable')
+            with self.assertRaises(requests.HTTPError):
+                fetch_dog_breeds()
+            self.assertEqual(Breed.query.filter_by(species='dog').count(), 0)
+
+    def test_script_initialization_loads_each_available_species(self):
+        from init_db import init_db as initialize_script
+        with patch.dict(os.environ, {'CAT_API_KEY': '', 'DOG_API_KEY': 'test-key'}), \
+             patch('init_db.fetch_cat_breeds') as fetch_cat, \
+             patch('init_db.fetch_dog_breeds') as fetch_dog:
+            initialize_script()
+            fetch_cat.assert_not_called()
+            fetch_dog.assert_called_once()
+        with patch.dict(os.environ, {'CAT_API_KEY': 'test-key', 'DOG_API_KEY': ''}), \
+             patch('init_db.fetch_cat_breeds') as fetch_cat, \
+             patch('init_db.fetch_dog_breeds') as fetch_dog:
+            initialize_script()
+            fetch_cat.assert_called_once()
+            fetch_dog.assert_not_called()
+
+    def test_app_initialization_fetches_only_missing_dogs(self):
+        with patch('app.DOG_API_KEY', 'test-key'), patch('app.fetch_dog_breeds') as fetch_dog, \
+             patch('app.fetch_cat_breeds') as fetch_cat:
+            init_db()
+            fetch_dog.assert_called_once()
+            fetch_cat.assert_not_called()
     
     def test_home_page(self):
         """Test if home page is accessible"""

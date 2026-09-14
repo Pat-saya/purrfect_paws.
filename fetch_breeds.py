@@ -127,6 +127,81 @@ def fetch_cat_breeds():
         db.session.rollback()
         raise
 
+
+def fetch_dog_breeds():
+    """Upsert dog breeds from The Dog API without changing cat records."""
+    try:
+        load_dotenv()
+        api_key = os.getenv('DOG_API_KEY')
+        if not api_key:
+            raise ValueError('DOG_API_KEY is not set')
+
+        response = requests.get(
+            'https://api.thedogapi.com/v1/breeds',
+            headers={'x-api-key': api_key, 'Accept': 'application/json'},
+            timeout=15,
+        )
+        response.raise_for_status()
+        breeds_data = response.json()
+        if not isinstance(breeds_data, list) or not breeds_data:
+            raise ValueError('No dog breeds data received from API')
+
+        existing_dogs = {
+            breed.api_breed_id: breed
+            for breed in Breed.query.filter_by(species='dog').all()
+        }
+        for breed_data in breeds_data:
+            record_id = breed_data.get('id') if isinstance(breed_data, dict) else None
+            try:
+                if isinstance(record_id, bool) or not isinstance(record_id, (int, str)):
+                    raise ValueError('missing or invalid breed ID')
+                api_breed_id = str(record_id).strip()
+                if not api_breed_id or (isinstance(record_id, int) and record_id <= 0):
+                    raise ValueError('missing or invalid breed ID')
+                name = breed_data.get('name')
+                if not isinstance(name, str) or not name.strip():
+                    raise ValueError('missing breed name')
+
+                attributes = []
+                for field, label in (
+                    ('temperament', 'Temperament'),
+                    ('bred_for', 'Bred For'),
+                    ('breed_group', 'Breed Group'),
+                    ('origin', 'Origin'),
+                    ('life_span', 'Life Span'),
+                ):
+                    if breed_data.get(field):
+                        attributes.append(f"{label}: {breed_data[field]}")
+                for field, label, unit in (
+                    ('weight', 'Weight', 'kg'),
+                    ('height', 'Height', 'cm'),
+                ):
+                    value = breed_data.get(field)
+                    if isinstance(value, dict) and value.get('metric'):
+                        attributes.append(f"{label}: {value['metric']} {unit}")
+
+                image = breed_data.get('image')
+                image_url = image.get('url') if isinstance(image, dict) else None
+                breed = existing_dogs.get(api_breed_id)
+                if breed is None:
+                    breed = Breed(species='dog', api_breed_id=api_breed_id)
+                    db.session.add(breed)
+                    existing_dogs[api_breed_id] = breed
+                breed.name = name.strip()
+                breed.attributes = '\n'.join(attributes)
+                if image_url:
+                    breed.image_url = image_url
+            except Exception as error:
+                logger.warning('Rejected dog breed API record id=%r: %s', record_id, error)
+
+        db.session.commit()
+        logger.info('Dog breeds available: %s', Breed.query.filter_by(species='dog').count())
+        return True
+    except Exception:
+        db.session.rollback()
+        logger.exception('Dog breed import failed')
+        raise
+
 if __name__ == '__main__':
     with app.app_context():
         # Fetch breeds

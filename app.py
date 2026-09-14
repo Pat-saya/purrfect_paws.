@@ -51,6 +51,7 @@ csrf = CSRFProtect(app)
 
 # Get API key
 CAT_API_KEY = os.getenv('CAT_API_KEY')
+DOG_API_KEY = os.getenv('DOG_API_KEY')
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG if debug_enabled else logging.INFO)
@@ -409,6 +410,8 @@ def init_db():
             # Keep saved users and results; fetch only for an empty breed table.
             if Breed.query.filter_by(species='cat').count() == 0 and CAT_API_KEY:
                 fetch_cat_breeds()
+            if Breed.query.filter_by(species='dog').count() == 0 and DOG_API_KEY:
+                fetch_dog_breeds()
             
             # Verify breeds were fetched
             breed_count = Breed.query.filter_by(species='cat').count()
@@ -416,9 +419,10 @@ def init_db():
             
             if breed_count == 0:
                 logger.warning("No breeds are available yet; run breed initialization after setting CAT_API_KEY")
+            logger.info("Dog breeds available: %s", Breed.query.filter_by(species='dog').count())
                 
         except Exception as e:
-            logger.error(f"Failed to fetch cat breeds: {str(e)}")
+            logger.error(f"Failed to initialize breeds: {str(e)}")
             raise
         
         logger.info("Database initialization completed successfully")
@@ -426,6 +430,11 @@ def init_db():
 def fetch_cat_breeds():
     """Fetch cat breeds through the shared, non-destructive importer."""
     from fetch_breeds import fetch_cat_breeds as fetch
+    return fetch()
+
+def fetch_dog_breeds():
+    """Fetch dog breeds through the non-destructive importer."""
+    from fetch_breeds import fetch_dog_breeds as fetch
     return fetch()
 
 def check_cat_breeds():
