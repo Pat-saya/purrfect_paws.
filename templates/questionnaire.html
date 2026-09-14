@@ -3,87 +3,65 @@
 {% block title %}Find Your Cat or Dog Match{% endblock %}
 
 {% block content %}
-<div class="container mt-5 mb-5">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header text-center">
-                    <h2 id="quizTitle">Find Your Cat or Dog Match</h2>
-                    <p class="text-muted" id="quizIntro">Choose a pet to begin.</p>
-                    <div class="progress mb-3" id="quizProgress" hidden>
+<main class="quiz-page">
+    <div class="container quiz-shell">
+        <div class="quiz-panel">
+            <header class="quiz-header">
+                <p class="quiz-eyebrow"><i class="fas fa-paw" aria-hidden="true"></i> COLLARS, NOSES &amp; PAWS</p>
+                <h1 id="quizTitle">Find Your Cat or Dog Match</h1>
+                <p id="quizIntro">Choose a pet to begin.</p>
+                <div id="quizProgress" class="quiz-progress" hidden>
+                    <div class="quiz-progress-labels">
+                        <span id="questionCount" aria-live="polite"></span>
+                        <span>YOUR JOURNEY</span>
+                    </div>
+                    <div class="progress">
                         <div class="progress-bar" role="progressbar" aria-label="Quiz progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width: 0%"></div>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div id="speciesChoice" class="text-center">
-                        <button type="button" class="btn btn-primary m-2" data-species="cat">Find My Cat Match</button>
-                        <button type="button" class="btn btn-primary m-2" data-species="dog">Find My Dog Match</button>
-                    </div>
-                    <p id="quizError" class="alert alert-danger" role="alert" hidden></p>
-                    <form id="questionnaireForm" hidden>
-                        <button type="button" class="btn btn-link mb-3" id="changeSpeciesBtn">Back to Cat/Dog choice</button>
-                        <div id="questionsContainer"></div>
-                        <div class="d-flex justify-content-between mt-4 mb-5">
-                            <button type="button" class="btn btn-secondary" id="prevBtn" hidden>Previous</button>
-                            <button type="button" class="btn btn-primary" id="nextBtn">Next</button>
-                            <button type="submit" class="btn btn-success" id="submitBtn" hidden>Get My Match</button>
-                        </div>
-                    </form>
+            </header>
+            <div class="quiz-body">
+                <div id="speciesChoice" class="species-choice">
+                    <button type="button" class="species-card species-card-cat" data-species="cat">
+                        <span class="species-icon" aria-hidden="true"><i class="fas fa-cat"></i></span>
+                        <span class="species-card-copy"><strong>Find My Cat Match</strong><span>For curious, cozy, and independent companions.</span></span>
+                        <i class="fas fa-arrow-right species-arrow" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="species-card species-card-dog" data-species="dog">
+                        <span class="species-icon" aria-hidden="true"><i class="fas fa-dog"></i></span>
+                        <span class="species-card-copy"><strong>Find My Dog Match</strong><span>For playful, loyal, and adventurous companions.</span></span>
+                        <i class="fas fa-arrow-right species-arrow" aria-hidden="true"></i>
+                    </button>
                 </div>
+                <p id="quizStatus" class="quiz-status" role="status" aria-live="polite" hidden></p>
+                <p id="quizError" class="quiz-error" role="alert" hidden></p>
+                <form id="questionnaireForm" hidden>
+                    <button type="button" class="quiz-back" id="changeSpeciesBtn"><i class="fas fa-arrow-left" aria-hidden="true"></i> Back to Cat/Dog choice</button>
+                    <div id="questionsContainer"></div>
+                    <div class="quiz-actions">
+                        <button type="button" class="btn quiz-prev" id="prevBtn" hidden><i class="fas fa-arrow-left" aria-hidden="true"></i> Previous</button>
+                        <button type="button" class="btn quiz-next" id="nextBtn">Next <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+                        <button type="submit" class="btn quiz-submit" id="submitBtn" hidden>Get My Match <i class="fas fa-paw" aria-hidden="true"></i></button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
-</div>
-
-<style>
-    [hidden] { display: none !important; }
-    .card {
-        border: none;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        margin-bottom: 5rem;
-    }
-    .card-header {
-        background: transparent;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-        padding: 1.5rem;
-    }
-    .question-container {
-        display: none;
-        margin-bottom: 2rem;
-        padding: 1.5rem;
-        border-radius: 8px;
-        background-color: #f8f9fa;
-    }
-    .question-container.active {
-        display: block;
-    }
-    .form-check {
-        margin: 0.5rem 0;
-    }
-    .btn {
-        padding: 0.8rem 1.5rem;
-        font-weight: 500;
-    }
-    .progress {
-        height: 10px;
-        border-radius: 5px;
-    }
-    .progress-bar {
-        background-color: #7eb8da;
-        transition: width 0.3s ease;
-    }
-</style>
+</main>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('questionnaireForm');
+    const quizPage = document.querySelector('.quiz-page');
     const questionsContainer = document.getElementById('questionsContainer');
     const speciesChoice = document.getElementById('speciesChoice');
     const title = document.getElementById('quizTitle');
     const intro = document.getElementById('quizIntro');
     const error = document.getElementById('quizError');
+    const status = document.getElementById('quizStatus');
     const progress = document.getElementById('quizProgress');
     const progressBar = progress.querySelector('.progress-bar');
+    const questionCount = document.getElementById('questionCount');
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
     const submitBtn = document.getElementById('submitBtn');
@@ -110,6 +88,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const percent = Math.round((currentIndex + 1) / questions.length * 100);
         progressBar.style.width = percent + '%';
         progressBar.setAttribute('aria-valuenow', percent);
+        questionCount.textContent = `Question ${currentIndex + 1} of ${questions.length}`;
     }
 
     function saveAnswer() {
@@ -121,11 +100,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
     async function chooseSpecies(chosen) {
         error.hidden = true;
+        status.textContent = 'Loading your questions…';
+        status.hidden = false;
+        speciesChoice.querySelectorAll('[data-species]').forEach(button => { button.disabled = true; });
         try {
             const response = await fetch('/api/questionnaire?species=' + encodeURIComponent(chosen));
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || 'Could not load questions.');
             species = chosen;
+            quizPage.dataset.species = chosen;
             questions = data.questions;
             answers = data.current_answers || {};
             currentIndex = 0;
@@ -139,7 +122,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 fieldset.appendChild(legend);
                 question.answers.forEach((answer, optionIndex) => {
                     const wrapper = document.createElement('div');
-                    wrapper.className = 'form-check';
+                    wrapper.className = 'form-check answer-option';
                     const input = document.createElement('input');
                     input.className = 'form-check-input';
                     input.type = 'radio';
@@ -164,6 +147,9 @@ document.addEventListener('DOMContentLoaded', function () {
             showQuestion();
         } catch (err) {
             showError(err.message);
+        } finally {
+            status.hidden = true;
+            speciesChoice.querySelectorAll('[data-species]').forEach(button => { button.disabled = false; });
         }
     }
 
@@ -172,6 +158,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     changeSpeciesBtn.addEventListener('click', () => {
         species = null;
+        delete quizPage.dataset.species;
         questions = [];
         answers = {};
         form.hidden = true;
@@ -180,6 +167,7 @@ document.addEventListener('DOMContentLoaded', function () {
         title.textContent = 'Find Your Cat or Dog Match';
         intro.textContent = 'Choose a pet to begin.';
         error.hidden = true;
+        status.hidden = true;
     });
     prevBtn.addEventListener('click', () => {
         saveAnswer();
@@ -205,6 +193,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         submitting = true;
         submitBtn.disabled = true;
+        submitBtn.setAttribute('aria-busy', 'true');
+        status.textContent = 'Finding your match…';
+        status.hidden = false;
         error.hidden = true;
         try {
             const response = await fetch('/questionnaire', {
@@ -219,6 +210,8 @@ document.addEventListener('DOMContentLoaded', function () {
             showError(err.message);
             submitting = false;
             submitBtn.disabled = false;
+            submitBtn.removeAttribute('aria-busy');
+            status.hidden = true;
         }
     });
 });
