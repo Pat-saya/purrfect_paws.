@@ -1,10 +1,11 @@
-from flask import Flask, request, jsonify, render_template, flash, redirect, url_for
+from flask import Flask, request, jsonify, render_template, flash, redirect, url_for, session
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from flask_cors import CORS
 from models import db, User, Question, Choice, Breed, UserResponse, connect_db, UserQuestionnaire, QuizResult
 from flask_wtf.csrf import CSRFProtect
 import os
 import secrets
+import re
 from dotenv import load_dotenv
 
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -58,58 +59,133 @@ logging.basicConfig(level=logging.DEBUG if debug_enabled else logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Questions data
-QUESTIONS = [
+CAT_QUESTIONS = [
     {
-        "questionNumber": 1,
+        "id": "c1", "questionNumber": 1,
         "question": "How active are you daily?",
         "answers": ["Couch potato (Calm)", "Moderately active (Playful)", "Highly energetic (Active)"]
     },
     {
-        "questionNumber": 2,
+        "id": "c2", "questionNumber": 2,
         "question": "Where do you live?",
         "answers": ["Apartment", "House", "Rural area"]
     },
     {
-        "questionNumber": 3,
+        "id": "c3", "questionNumber": 3,
         "question": "How much time can you spend daily interacting with your cat?",
         "answers": ["Less than 1 hour", "1–3 hours", "More than 3 hours"]
     },
     {
-        "questionNumber": 4,
+        "id": "c4", "questionNumber": 4,
         "question": "Do you want a clingy 'lap cat' or an independent cat?",
         "answers": ["Clingy lap cat", "Balanced", "Independent cat"]
     },
     {
-        "questionNumber": 5,
+        "id": "c5", "questionNumber": 5,
         "question": "Are you willing to brush your cat daily?",
         "answers": ["Yes, daily brushing", "Weekly brushing", "Prefer low-maintenance"]
     },
     {
-        "questionNumber": 6,
+        "id": "c6", "questionNumber": 6,
         "question": "Do you have children or other pets?",
         "answers": ["Yes, children/pets", "Occasional visitors", "No, live alone"]
     },
     {
-        "questionNumber": 7,
+        "id": "c7", "questionNumber": 7,
         "question": "Are you okay with a vocal, chatty cat?",
         "answers": ["Yes, love chatty cats", "Moderate vocalization", "Prefer quiet cats"]
     },
     {
-        "questionNumber": 8,
+        "id": "c8", "questionNumber": 8,
         "question": "What's your experience with cats?",
         "answers": ["First-time owner", "Some experience", "Very experienced"]
     },
     {
-        "questionNumber": 9,
+        "id": "c9", "questionNumber": 9,
         "question": "Do you travel often?",
         "answers": ["Often travel", "Occasionally travel", "Rarely travel"]
     },
     {
-        "questionNumber": 10,
+        "id": "c10", "questionNumber": 10,
         "question": "Would you prefer a kitten or adult cat?",
         "answers": ["Kitten", "No preference", "Adult cat"]
     }
 ]
+
+DOG_QUESTIONS = [
+    {"id": "d1", "question": "Preferred dog size?", "answers": ["Small", "Medium", "Large"]},
+    {"id": "d2", "question": "How active are you daily?", "answers": ["Relaxed", "Moderately active", "Very active"]},
+    {"id": "d3", "question": "How much daily exercise can you provide?", "answers": ["Under 30 minutes", "30–60 minutes", "More than 60 minutes"]},
+    {"id": "d4", "question": "Where do you live?", "answers": ["Apartment", "House with limited outdoor space", "House with a yard"]},
+    {"id": "d5", "question": "What is your dog-owning experience?", "answers": ["First-time owner", "Some experience", "Very experienced"]},
+    {"id": "d6", "question": "How long will your dog usually be home alone?", "answers": ["Rarely — less than 2 hours", "Sometimes — 2 to 6 hours", "Often — more than 6 hours"]},
+    {"id": "d7", "question": "Will the dog live with children?", "answers": ["Yes", "Sometimes", "No"]},
+    {"id": "d8", "question": "Will the dog live with other pets?", "answers": ["Yes", "Sometimes", "No"]},
+    {"id": "d9", "question": "What personality do you prefer?", "answers": ["Calm and gentle", "Friendly and playful", "Alert and protective"]},
+    {"id": "d10", "question": "What kind of companion are you looking for?", "answers": ["Lap or companion dog", "Family dog", "Outdoor, sporting, or working dog"]},
+]
+
+QUESTION_SETS = {'cat': CAT_QUESTIONS, 'dog': DOG_QUESTIONS}
+
+
+def score_dog_breed(breed, answers):
+    """Score a dog with simple lifestyle, temperament and purpose clues."""
+    details = (breed.attributes or '').lower()
+    score = 0
+    weight_line = next((line for line in details.splitlines() if line.startswith('weight:')), '')
+    weights = [float(value) for value in re.findall(r'\d+(?:\.\d+)?', weight_line)]
+    if weights:
+        weight = sum(weights[:2]) / min(len(weights), 2)
+        size = answers['d1']
+        if ((size == 'Small' and weight < 10) or
+                (size == 'Medium' and 10 <= weight < 25) or
+                (size == 'Large' and weight >= 25)):
+            score += 3  # A practical size match is the strongest signal.
+    else:
+        height_line = next((line for line in details.splitlines() if line.startswith('height:')), '')
+        heights = [float(value) for value in re.findall(r'\d+(?:\.\d+)?', height_line)]
+        if heights:
+            height = sum(heights[:2]) / min(len(heights), 2)
+            size = answers['d1']
+            if ((size == 'Small' and height < 35) or
+                    (size == 'Medium' and 35 <= height < 55) or
+                    (size == 'Large' and height >= 55)):
+                score += 3  # Height helps when the API has no usable weight.
+
+    # Temperament and original purpose provide useful, but imperfect, clues.
+    personality_words = {
+        'Calm and gentle': ('calm', 'gentle', 'easygoing'),
+        'Friendly and playful': ('friendly', 'playful', 'outgoing'),
+        'Alert and protective': ('alert', 'protective', 'watchdog'),
+    }
+    if any(word in details for word in personality_words[answers['d9']]):
+        score += 2
+    purpose_words = {
+        'Lap or companion dog': ('companion', 'lap', 'toy'),
+        'Family dog': ('family', 'friendly', 'gentle'),
+        'Outdoor, sporting, or working dog': ('sporting', 'working', 'hunting', 'herding', 'retriev'),
+    }
+    if any(word in details for word in purpose_words[answers['d10']]):
+        score += 2
+    if answers['d7'] == 'Yes' and any(word in details for word in ('child', 'family', 'gentle')):
+        score += 2
+    if answers['d8'] == 'Yes' and any(word in details for word in ('dog friendly', 'social', 'friendly')):
+        score += 2
+
+    active = any(word in details for word in ('energetic', 'active', 'sporting', 'working', 'hunting', 'herding'))
+    calm = any(word in details for word in ('calm', 'gentle', 'companion', 'toy'))
+    if answers['d2'] == 'Very active' and active or answers['d2'] == 'Relaxed' and calm:
+        score += 1
+    if answers['d3'] == 'More than 60 minutes' and active or answers['d3'] == 'Under 30 minutes' and calm:
+        score += 1
+    if answers['d4'] == 'Apartment' and calm or answers['d4'] == 'House with a yard' and active:
+        score += 1
+    if answers['d5'] == 'First-time owner' and calm or answers['d5'] == 'Very experienced' and active:
+        score += 1
+    if answers['d6'] == 'Often — more than 6 hours' and 'independent' in details:
+        score += 1
+    return score
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -228,96 +304,72 @@ def logout():
 @app.route('/questionnaire', methods=['GET', 'POST'])
 @login_required
 def questionnaire():
-    """Render the questionnaire page and handle form submission."""
-    if request.method == 'POST':
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({'success': False, 'message': 'No data received'}), 400
-                
-            answers = data.get('answers', {})
-            if not answers:
-                return jsonify({'success': False, 'message': 'No answers provided'}), 400
+    """Choose a species, validate its answers, and save one match."""
+    if request.method == 'GET':
+        session['questionnaire_token'] = secrets.token_urlsafe(24)
+        return render_template('questionnaire.html', submission_token=session['questionnaire_token'])
 
-            breeds = Breed.query.filter_by(species='cat').all()
-            if not breeds:
-                return jsonify({'success': False, 'message': 'No cat breeds are available yet'}), 503
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'success': False, 'message': 'Send questionnaire answers as JSON.'}), 400
+    species = data.get('species')
+    if not isinstance(species, str) or species not in QUESTION_SETS:
+        return jsonify({'success': False, 'message': 'Choose cat or dog.'}), 400
+    answers = data.get('answers')
+    questions = QUESTION_SETS[species]
+    expected_ids = {question['id'] for question in questions}
+    if not isinstance(answers, dict) or set(answers) != expected_ids:
+        return jsonify({'success': False, 'message': 'Answer all 10 questions with no extra answers.'}), 400
+    for question in questions:
+        if answers[question['id']] not in question['answers']:
+            return jsonify({'success': False, 'message': f"Invalid answer for {question['id']}."}), 400
+    token = data.get('submission_token')
+    if not token or token != session.get('questionnaire_token'):
+        return jsonify({'success': False, 'message': 'This quiz was already submitted. Start a new quiz to try again.'}), 409
 
-            # Create keyword counter from answers
-            keywords = []
-            for answer in answers.values():
-                keywords.extend(answer.lower().split())
+    breeds = Breed.query.filter_by(species=species).all()
+    if not breeds:
+        return jsonify({'success': False, 'message': f'No {species} breeds are available yet.'}), 503
 
-            best_match = None
-            best_score = -1
-            breed_scores = []
+    if species == 'cat':
+        # Keep the existing cat keyword matching behavior.
+        keywords = [word for answer in answers.values() for word in answer.lower().split()]
+        score = lambda breed: sum(word in (breed.attributes or '').lower() for word in keywords)
+    else:
+        score = lambda breed: score_dog_breed(breed, answers)
+    # Name and ID make ties deterministic. A zero-score result is still useful
+    # as a starting point when imported attributes are incomplete.
+    best_match = min(breeds, key=lambda breed: (-score(breed), breed.name.lower(), breed.id))
+    try:
+        saved = UserQuestionnaire(
+            user_id=current_user.id, species=species, answers=answers,
+            completed=True, matched_breed_id=best_match.id,
+        )
+        db.session.add(saved)
+        db.session.commit()
+        session.pop('questionnaire_token', None)
+        return jsonify({'success': True, 'redirect': url_for('results')})
+    except Exception:
+        db.session.rollback()
+        logger.exception('Questionnaire submission failed')
+        return jsonify({'success': False, 'message': 'Could not save your match. Please try again.'}), 500
 
-            for breed in breeds:
-                score = 0
-                attributes = breed.attributes.lower()
-                
-                # Match keywords against breed attributes
-                for keyword in keywords:
-                    if keyword in attributes:
-                        score += 1
-
-                # Store breed and its score
-                breed_scores.append({
-                    'name': breed.name,
-                    'score': score,
-                    'attributes': breed.attributes
-                })
-
-                # Update best match if this breed has a higher score
-                if score > best_score:
-                    best_score = score
-                    best_match = breed
-
-            # Sort breeds by score
-            breed_scores.sort(key=lambda x: x['score'], reverse=True)
-
-            if best_match is None:
-                return jsonify({'success': False, 'message': 'No cat breed match is available'}), 503
-
-            # Save questionnaire
-            questionnaire = UserQuestionnaire(
-                user_id=current_user.id,
-                answers=answers,
-                species='cat',
-                completed=True,
-                matched_breed_id=best_match.id
-            )
-            db.session.add(questionnaire)
-            db.session.commit()
-
-            return jsonify({
-                'success': True,
-                'redirect': '/results',
-                'breed_scores': breed_scores[:1]  
-            })
-
-        except Exception as e:
-            logger.error(f"Questionnaire submission error: {str(e)}")
-            db.session.rollback()
-            return jsonify({
-                'success': False,
-                'message': 'An error occurred while processing your submission'
-            }), 500
-
-    return render_template('questionnaire.html')
 
 @app.route('/api/questionnaire', methods=['GET'])
 @login_required
 def get_questionnaire():
+    species = request.args.get('species')
+    if species not in QUESTION_SETS:
+        return jsonify({'message': 'Choose cat or dog.'}), 400
     questionnaire = UserQuestionnaire.query.filter_by(
-        user_id=current_user.id, completed=False, species='cat'
+        user_id=current_user.id, completed=False, species=species
     ).order_by(UserQuestionnaire.created_at.desc()).first()
-    
     return jsonify({
-        'species': 'cat',
-        'questions': QUESTIONS,
-        'current_answers': questionnaire.answers if questionnaire else {}
+        'species': species,
+        'questions': QUESTION_SETS[species],
+        'current_answers': questionnaire.answers if questionnaire else {},
     })
+
 
 @app.route('/results')
 @login_required

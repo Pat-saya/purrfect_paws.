@@ -23,7 +23,7 @@ os.environ['SECRET_KEY'] = 'test-only-secret'
 os.environ['SESSION_COOKIE_SECURE'] = '0'
 os.environ['CAT_API_KEY'] = ''
 os.environ['DOG_API_KEY'] = ''
-from app import app, db, init_db
+from app import app, db, init_db, QUESTION_SETS, score_dog_breed
 from models import User, Question, Choice, Breed, UserQuestionnaire, UserResponse, QuizResult
 from werkzeug.security import generate_password_hash
 from sqlalchemy.exc import IntegrityError
@@ -67,6 +67,20 @@ class TestPurrfectPaws(unittest.TestCase):
         self.client.post('/login', data={'email': 'test@example.com', 'password': 'testpass123'})
         return user_id
 
+    def valid_answers(self, species):
+        return {question['id']: question['answers'][0] for question in QUESTION_SETS[species]}
+
+    def post_quiz(self, species, answers=None, token=None):
+        if token is None:
+            self.client.get('/questionnaire')
+            with self.client.session_transaction() as session:
+                token = session['questionnaire_token']
+        return self.client.post('/questionnaire', json={
+            'species': species,
+            'answers': answers if answers is not None else self.valid_answers(species),
+            'submission_token': token,
+        })
+
     def test_breed_constraints(self):
         with app.app_context():
             db.session.add(Breed(name='Duplicate', attributes='test', species='cat', api_breed_id='test_breed'))
@@ -85,7 +99,7 @@ class TestPurrfectPaws(unittest.TestCase):
         with app.app_context():
             db.session.add(Breed(name='Dog', attributes='energetic', species='dog', api_breed_id='dog1'))
             db.session.commit()
-        response = self.client.post('/questionnaire', json={'answers': {'q1': 'energetic'}})
+        response = self.post_quiz('cat')
         self.assertEqual(response.status_code, 200)
         with app.app_context():
             saved = UserQuestionnaire.query.filter_by(user_id=user_id).first()
@@ -108,7 +122,7 @@ class TestPurrfectPaws(unittest.TestCase):
         with app.app_context():
             Breed.query.delete()
             db.session.commit()
-        response = self.client.post('/questionnaire', json={'answers': {'q1': 'test'}})
+        response = self.post_quiz('cat')
         self.assertEqual(response.status_code, 503)
         self.assertIn(b'No cat breeds', response.data)
         with app.app_context():
@@ -119,10 +133,132 @@ class TestPurrfectPaws(unittest.TestCase):
 
     def test_questionnaire_api_identifies_cat(self):
         self.login_test_user()
-        response = self.client.get('/api/questionnaire')
+        response = self.client.get('/api/questionnaire?species=cat')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['species'], 'cat')
         self.assertEqual(len(response.json['questions']), 10)
+
+    def test_questionnaire_apis_and_invalid_species(self):
+        self.login_test_user()
+        cat = self.client.get('/api/questionnaire?species=cat')
+        dog = self.client.get('/api/questionnaire?species=dog')
+        self.assertEqual(len(cat.json['questions']), 10)
+        self.assertEqual(len(dog.json['questions']), 10)
+        self.assertNotEqual(cat.json['questions'][0]['id'], dog.json['questions'][0]['id'])
+        self.assertNotEqual(cat.json['questions'][0]['question'], dog.json['questions'][0]['question'])
+        self.assertEqual(self.client.get('/api/questionnaire?species=bird').status_code, 400)
+        self.assertEqual(self.client.get('/api/questionnaire').status_code, 400)
+
+    def test_questionnaire_post_validates_species_and_answers(self):
+        self.login_test_user()
+        self.client.get('/questionnaire')
+        with self.client.session_transaction() as session:
+            token = session['questionnaire_token']
+        valid = self.valid_answers('dog')
+        cases = [
+            ({'answers': valid, 'submission_token': token}, 'Choose cat or dog'),
+            ({'species': 'bird', 'answers': valid, 'submission_token': token}, 'Choose cat or dog'),
+            ({'species': 'dog', 'answers': {}, 'submission_token': token}, 'Answer all 10'),
+            ({'species': 'dog', 'answers': {**valid, 'extra': 'Yes'}, 'submission_token': token}, 'Answer all 10'),
+            ({'species': 'dog', 'answers': {**valid, 'd1': 'Friendly'}, 'submission_token': token}, 'Invalid answer'),
+        ]
+        for payload, message in cases:
+            with self.subTest(message=message):
+                response = self.client.post('/questionnaire', json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(message, response.json['message'])
+        with app.app_context():
+            self.assertEqual(UserQuestionnaire.query.count(), 0)
+
+    def test_cat_and_dog_submissions_match_their_own_species(self):
+        user_id = self.login_test_user()
+        with app.app_context():
+            db.session.add(Breed(name='Dog Match', attributes='Weight: 6 kg\nTemperament: Friendly', species='dog', api_breed_id='dog1'))
+            db.session.commit()
+        cat_response = self.post_quiz('cat')
+        dog_response = self.post_quiz('dog')
+        self.assertEqual(cat_response.status_code, 200)
+        self.assertEqual(dog_response.status_code, 200)
+        with app.app_context():
+            saved = UserQuestionnaire.query.filter_by(user_id=user_id).order_by(UserQuestionnaire.id).all()
+            self.assertEqual([item.species for item in saved], ['cat', 'dog'])
+            self.assertEqual([item.breed.species for item in saved], ['cat', 'dog'])
+        result = self.client.get('/results')
+        self.assertIn(b'Your Perfect Dog Breed Match', result.data)
+        self.assertIn(b'This match is a starting point', result.data)
+
+    def test_species_filter_overrides_higher_other_species_score(self):
+        self.login_test_user()
+        with app.app_context():
+            cat = Breed.query.filter_by(species='cat').one()
+            cat.attributes = 'Weight: 5 kg\nTemperament: Friendly, calm\nBred For: Companion'
+            db.session.add(Breed(name='Dog', attributes=' '.join(self.valid_answers('cat').values()),
+                                 species='dog', api_breed_id='dog1'))
+            db.session.commit()
+        self.assertEqual(self.post_quiz('cat').status_code, 200)
+        with app.app_context():
+            self.assertEqual(UserQuestionnaire.query.order_by(UserQuestionnaire.id.desc()).first().breed.species, 'cat')
+        with app.app_context():
+            cat = Breed.query.filter_by(species='cat').one()
+            cat.attributes = 'Weight: 6 kg\nTemperament: Friendly, calm\nBred For: Companion'
+            dog = Breed.query.filter_by(species='dog').one()
+            dog.attributes = ''
+            db.session.commit()
+        self.assertEqual(self.post_quiz('dog').status_code, 200)
+        with app.app_context():
+            self.assertEqual(UserQuestionnaire.query.order_by(UserQuestionnaire.id.desc()).first().breed.species, 'dog')
+
+    def test_no_dog_breeds_does_not_save_questionnaire(self):
+        self.login_test_user()
+        response = self.post_quiz('dog')
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('No dog breeds', response.json['message'])
+        with app.app_context():
+            self.assertEqual(UserQuestionnaire.query.count(), 0)
+
+    def test_dog_scoring_handles_unusual_attributes_and_ties(self):
+        self.login_test_user()
+        with app.app_context():
+            db.session.add_all([
+                Breed(name='Zulu', attributes='Weight: unknown\nHeight: varies', species='dog', api_breed_id='dog1'),
+                Breed(name='Alpha', attributes='', species='dog', api_breed_id='dog2'),
+            ])
+            db.session.commit()
+            zulu = Breed.query.filter_by(name='Zulu').one()
+            self.assertIsInstance(score_dog_breed(zulu, self.valid_answers('dog')), int)
+        response = self.post_quiz('dog')
+        self.assertEqual(response.status_code, 200)
+        with app.app_context():
+            self.assertEqual(UserQuestionnaire.query.first().breed.name, 'Alpha')
+
+    def test_submission_token_prevents_duplicate_save(self):
+        self.login_test_user()
+        self.client.get('/questionnaire')
+        with self.client.session_transaction() as session:
+            token = session['questionnaire_token']
+        first = self.post_quiz('cat', token=token)
+        second = self.post_quiz('cat', token=token)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 409)
+        with app.app_context():
+            self.assertEqual(UserQuestionnaire.query.count(), 1)
+
+    def test_questionnaire_post_still_requires_csrf_when_enabled(self):
+        self.login_test_user()
+        self.client.get('/questionnaire')
+        with self.client.session_transaction() as session:
+            token = session['questionnaire_token']
+        app.config['WTF_CSRF_ENABLED'] = True
+        try:
+            response = self.client.post('/questionnaire', json={
+                'species': 'cat', 'answers': self.valid_answers('cat'),
+                'submission_token': token,
+            })
+            self.assertEqual(response.status_code, 400)
+            with app.app_context():
+                self.assertEqual(UserQuestionnaire.query.count(), 0)
+        finally:
+            app.config['WTF_CSRF_ENABLED'] = False
 
     def test_import_upserts_by_species_and_api_id(self):
         from fetch_breeds import fetch_cat_breeds
@@ -281,6 +417,9 @@ class TestPurrfectPaws(unittest.TestCase):
         # Test questionnaire access
         response = self.client.get('/questionnaire')
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b'Find My Cat Match', response.data)
+        self.assertIn(b'Find My Dog Match', response.data)
+        self.assertNotIn(b'Preferred dog size?', response.data)
     
     def test_questionnaire_submission(self):
         """Test questionnaire submission and breed matching"""
@@ -299,23 +438,8 @@ class TestPurrfectPaws(unittest.TestCase):
             'password': 'testpass123'
         }, follow_redirects=True)
         
-        # Submit questionnaire
-        test_answers = {
-            'answers': {
-                'question0': 'Highly energetic (Active)',
-                'question1': 'House',
-                'question2': '1-3 hours',
-                'question3': 'Independent cat',
-                'question4': 'Weekly brush',
-                'question5': 'No, live alone',
-                'question6': 'Yes, love chatty cats',
-                'question7': 'Some experience',
-                'question8': 'Often travel',
-                'question9': 'No preference'
-            }
-        }
-        
-        response = self.client.post('/questionnaire', json=test_answers, follow_redirects=True)
+        # Submit the validated cat questionnaire
+        response = self.post_quiz('cat')
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json['success'])
         
