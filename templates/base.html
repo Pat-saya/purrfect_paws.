@@ -25,133 +25,38 @@
       rel="stylesheet"
       href="{{ url_for('static', filename='css/style.css') }}"
     />
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        background-color: #fafafa; /* Warm white background */
-      }
 
-      /* Add styles for scroll-to-top button */
-      .scroll-top {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 40px;
-        height: 40px;
-        background-color: #0d6efd;
-        color: white;
-        border: none;
-        border-radius: 50%;
-        cursor: pointer;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.2rem;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        transition: all 0.3s ease;
-        z-index: 1000;
-      }
-
-      .scroll-top:hover {
-        background-color: #0b5ed7;
-        transform: translateY(-3px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-      }
-
-      .scroll-top.visible {
-        display: flex;
-      }
-
-      .main-content {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        margin: 0;
-        padding: 0;
-        position: relative;
-        z-index: 1;
-      }
-
-      .navbar {
-        padding: 0.75rem 0;
-        background-color: #f5f5f5; /* Warm gray navbar */
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        margin: 0;
-        position: relative;
-        top: 0;
-        z-index: 2;
-      }
-
-      .navbar-brand {
-        padding: 0;
-      }
-
-      .nav-link {
-        padding: 0.5rem 0;
-      }
-
-      .footer {
-        background-color: #f5f5f5; /* Warm gray footer */
-        border-top: 1px solid #e9ecef;
-        padding: 1rem 0;
-        margin-top: auto;
-        position: relative;
-        z-index: 2;
-      }
-
-      .footer-content {
-        font-size: 0.9rem;
-        color: #6c757d;
-      }
-
-      .footer i {
-        font-size: 0.8rem;
-      }
-    </style>
   </head>
 
   <body>
     <!-- Main Content Container -->
     <div class="main-content">
-      <!-- Bootstrap Navbar -->
-      <nav class="navbar navbar-expand-lg navbar-light">
+      <nav class="navbar navbar-expand-lg site-nav" aria-label="Main navigation">
         <div class="container">
-          <a class="navbar-brand" href="{{ url_for('index') }}">
-            <i class="fas fa-paw"></i>
-            <span>Purrfect Paws</span>
+          <a class="navbar-brand site-brand" href="{{ url_for('index') }}">
+            <span class="brand-mark" aria-hidden="true"><i class="fas fa-paw"></i></span>
+            <span>Purrfect <strong>Paws</strong></span>
           </a>
-          <button
-            class="navbar-toggler"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#navbarNav"
-          >
+          <button class="navbar-toggler site-nav-toggle" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                  aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ms-auto">
+            <ul class="navbar-nav ms-auto align-items-lg-center site-nav-links">
               {% if current_user.is_authenticated %}
               <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('questionnaire') }}">
-                  <i class="fas fa-clipboard-list"></i> Take Quiz
-                </a>
+                <a class="nav-link" href="{{ url_for('questionnaire') }}">Take Quiz</a>
               </li>
               <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('logout') }}">
-                  <i class="fas fa-sign-out-alt"></i> Logout
-                </a>
+                <a class="nav-link nav-action" href="{{ url_for('logout') }}">Logout</a>
               </li>
               {% else %}
               <li class="nav-item">
                 <a class="nav-link" href="{{ url_for('login') }}">Login</a>
               </li>
               <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('register') }}">Register</a>
+                <a class="nav-link nav-action" href="{{ url_for('register') }}">Create Account</a>
               </li>
               {% endif %}
             </ul>
@@ -182,49 +87,22 @@
       {% block content %}{% endblock %}
     </div>
 
-    <!-- Footer -->
-    <footer class="footer">
-      <div class="container text-center">
-        <div class="footer-content">
-          <span class="text-muted">
-            <i class="far fa-copyright"></i>
-            2024 Purrfect Paws. All rights reserved.
-          </span>
-        </div>
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <a class="footer-brand" href="{{ url_for('index') }}"><i class="fas fa-paw" aria-hidden="true"></i> Purrfect Paws</a>
+        <p class="mb-0">Thoughtful matches for cats, dogs, and the people who love them.</p>
+        <small>© 2026 Purrfect Paws</small>
       </div>
     </footer>
 
-    <!-- Scroll to Top Button -->
-    <button id="scrollTop" class="scroll-top">
-      <i class="fas fa-paw"></i>
+    <button id="scrollTop" class="scroll-top" type="button" aria-label="Scroll to top">
+      <i class="fas fa-arrow-up" aria-hidden="true"></i>
     </button>
 
     <!-- Bootstrap JS and dependencies -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <script>
-      // Scroll to top functionality
-      document.addEventListener("DOMContentLoaded", function () {
-        const scrollTopBtn = document.getElementById("scrollTop");
 
-        // Show/hide button based on scroll position
-        window.addEventListener("scroll", function () {
-          if (window.pageYOffset > 300) {
-            scrollTopBtn.classList.add("visible");
-          } else {
-            scrollTopBtn.classList.remove("visible");
-          }
-        });
-
-        // Smooth scroll to top when clicked
-        scrollTopBtn.addEventListener("click", function () {
-          window.scrollTo({
-            top: 0,
-            behavior: "smooth",
-          });
-        });
-      });
-    </script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

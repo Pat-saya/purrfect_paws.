@@ -1,131 +1,130 @@
-{% extends "base.html" %}
+{% extends "base.html" %} {% block title %}Purrfect Paws | Find Your Cat or Dog
+Match{% endblock %} {% block content %}
+<main class="home-page">
+  <section class="home-hero" aria-labelledby="hero-title">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow">
+          <i class="fas fa-paw" aria-hidden="true"></i> COLLARS, NOSES &amp;
+          PAWS
+        </p>
+        <h1 id="hero-title">Find a cat or dog that fits <em>your life.</em></h1>
+        <p class="hero-lead">
+          Choose your pet, answer a short lifestyle questionnaire, and meet a
+          breed worth getting to know.
+        </p>
+        <div class="hero-actions">
+          {% if current_user.is_authenticated %}
+          <a href="{{ url_for('questionnaire') }}" class="btn home-primary-cta"
+            >Start Quiz <i class="fas fa-arrow-right" aria-hidden="true"></i
+          ></a>
+          {% else %}
+          <a href="{{ url_for('login') }}" class="btn home-primary-cta"
+            >Get Started <i class="fas fa-arrow-right" aria-hidden="true"></i
+          ></a>
+          {% endif %}
+          <span class="hero-note"
+            ><i class="far fa-clock" aria-hidden="true"></i> 10 questions, one
+            thoughtful match</span
+          >
+        </div>
+      </div>
+      <div
+        class="hero-visual"
+        aria-label="Cat and dog breed matching illustration"
+      >
+        <div class="hero-orbit hero-orbit-one" aria-hidden="true"></div>
+        <div class="hero-orbit hero-orbit-two" aria-hidden="true"></div>
+        <div class="pet-card pet-card-cat">
+          <span class="pet-card-icon" aria-hidden="true"
+            ><i class="fas fa-cat"></i
+          ></span>
+          <span class="pet-card-label">CAT PATH</span>
+          <strong>Curious by nature.</strong>
+          <span>Find a feline that feels at home.</span>
+        </div>
+        <div class="pet-card pet-card-dog">
+          <span class="pet-card-icon" aria-hidden="true"
+            ><i class="fas fa-dog"></i
+          ></span>
+          <span class="pet-card-label">DOG PATH</span>
+          <strong>Ready for your rhythm.</strong>
+          <span>Discover a canine companion.</span>
+        </div>
+        <span class="hero-tag" aria-hidden="true"
+          ><i class="fas fa-heart"></i> Made for real life</span
+        >
+      </div>
+    </div>
+  </section>
 
-{% block title %}Purrfect Paws - Find Your Perfect Cat or Dog{% endblock %}
-
-{% block content %}
-<!-- Background Paw Prints -->
-<div class="paw-background">
-    <div class="paw paw-1"></div>
-    <div class="paw paw-2"></div>
-    <div class="paw paw-3"></div>
-</div>
-
-<!-- Hero Section -->
-<section class="hero-section">
+  <section class="home-process" aria-labelledby="process-title">
     <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-md-8 text-center">
-                <h1 class="hero-title">Find Your Perfect Cat or Dog Breed</h1>
-                <p class="hero-lead">Take our personality quiz to discover the cat or dog breed that best matches your lifestyle and preferences.</p>
-                {% if current_user.is_authenticated %}
-                    <a href="{{ url_for('questionnaire') }}" class="btn btn-primary btn-lg">Start Quiz</a>
-                {% else %}
-                    <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg">Get Started</a>
-                {% endif %}
-            </div>
-        </div>
+      <div class="section-heading">
+        <p class="eyebrow">THE JOURNEY</p>
+        <h2 id="process-title">A simple way to start the search.</h2>
+        <p>
+          Our quiz turns your preferences into a practical breed suggestion.
+        </p>
+      </div>
+      <div class="process-grid">
+        <article class="process-card process-blue">
+          <span class="process-step">01</span>
+          <span class="process-icon" aria-hidden="true"
+            ><i class="fas fa-paw"></i
+          ></span>
+          <h3>Choose Cat or Dog</h3>
+          <p>
+            Pick the companion you're interested in. Each has its own question
+            set.
+          </p>
+        </article>
+        <article class="process-card process-lilac">
+          <span class="process-step">02</span>
+          <span class="process-icon" aria-hidden="true"
+            ><i class="fas fa-clipboard-list"></i
+          ></span>
+          <h3>Tell us about life</h3>
+          <p>
+            Answer ten short questions about your home, routine, and
+            preferences.
+          </p>
+        </article>
+        <article class="process-card process-apricot">
+          <span class="process-step">03</span>
+          <span class="process-icon" aria-hidden="true"
+            ><i class="fas fa-heart"></i
+          ></span>
+          <h3>Meet a breed</h3>
+          <p>
+            See a compatible breed and explore the traits behind your match.
+          </p>
+        </article>
+      </div>
     </div>
-</section>
+  </section>
 
-<!-- Features Section -->
-<div class="container mt-5">
-    <div class="row">
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <i class="fas fa-paw fa-3x mb-3 text-primary"></i>
-                    <h3>Personality Match</h3>
-                    <p>Our quiz analyzes your lifestyle and preferences to find a cat or dog breed for you.</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <i class="fas fa-info-circle fa-3x mb-3 text-primary"></i>
-                    <h3>Detailed Information</h3>
-                    <p>Get comprehensive information about each cat or dog breed, including temperament, care needs, and characteristics.</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <i class="fas fa-heart fa-3x mb-3 text-primary"></i>
-                    <h3>Save Your Results</h3>
-                    <p>Create an account to save your quiz results and view them later.</p>
-                </div>
-            </div>
-        </div>
+  <section class="home-note" aria-labelledby="note-title">
+    <div class="container note-inner">
+      <div>
+        <p class="eyebrow">A THOUGHTFUL FIRST STEP</p>
+        <h2 id="note-title">Every animal has their own story.</h2>
+        <p>
+          A breed match is a starting point, not a promise. Individual cats and
+          dogs vary, so learn about the breed and meet animals with an open
+          mind.
+        </p>
+      </div>
+      {% if current_user.is_authenticated %}
+      <a href="{{ url_for('questionnaire') }}" class="btn note-cta"
+        >Start Quiz <i class="fas fa-arrow-right" aria-hidden="true"></i
+      ></a>
+      {% else %}
+      <a href="{{ url_for('login') }}" class="btn note-cta"
+        >Get Started <i class="fas fa-arrow-right" aria-hidden="true"></i
+      ></a>
+      {% endif %}
     </div>
-</div>
-
-<!-- How It Works Section -->
-<div class="container mt-5">
-    <h2 class="text-center mb-4">How It Works</h2>
-    <div class="row">
-        <div class="col-md-3">
-            <div class="text-center">
-                <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
-                    <span class="h4 mb-0">1</span>
-                </div>
-                <h4>Take the Quiz</h4>
-                <p>Answer questions about your lifestyle and preferences</p>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="text-center">
-                <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
-                    <span class="h4 mb-0">2</span>
-                </div>
-                <h4>Get Matched</h4>
-                <p>Our algorithm finds a cat or dog breed for you</p>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="text-center">
-                <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
-                    <span class="h4 mb-0">3</span>
-                </div>
-                <h4>View Results</h4>
-                <p>See detailed information about your matched breed</p>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="text-center">
-                <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
-                    <span class="h4 mb-0">4</span>
-                </div>
-                <h4>Save & Share</h4>
-                <p>Save your results and share with others</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Scroll to Top Button -->
-<button class="scroll-top" id="scrollTop">
-    <i class="fas fa-arrow-up"></i>
-</button>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const scrollTop = document.getElementById('scrollTop');
-    
-    window.addEventListener('scroll', function() {
-        if (window.pageYOffset > 300) {
-            scrollTop.classList.add('visible');
-        } else {
-            scrollTop.classList.remove('visible');
-        }
-    });
-    
-    scrollTop.addEventListener('click', function() {
-        window.scrollTo({
-            top: 0,
-            behavior: 'smooth'
-        });
-    });
-});
-</script>
-{% endblock %} 
+  </section>
+</main>
+{% endblock %}
