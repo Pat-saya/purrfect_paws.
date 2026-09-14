@@ -1,12 +1,11 @@
 from dotenv import load_dotenv
 import os
 import requests
-from models import db, CatBreed
+from models import db, Breed
 from app import app
 import logging
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 def fetch_cat_breeds():
@@ -39,7 +38,7 @@ def fetch_cat_breeds():
         logger.info(f"Successfully fetched {len(breeds_data)} breeds from The Cat API")
         
         # Get all existing breeds
-        breed_map = {breed.name: breed for breed in CatBreed.query.all()}
+        breed_map = {breed.api_breed_id: breed for breed in Breed.query.filter_by(species='cat').all()}
         
         # Process each breed from the API
         for breed_data in breeds_data:
@@ -81,26 +80,32 @@ def fetch_cat_breeds():
                 
                 # Get breed ID and reference image
                 breed_id = breed_data['id']
+                if not breed_id or not breed_data.get('name'):
+                    raise ValueError('missing breed ID or name')
+                image_url = (breed_data.get('image') or {}).get('url')
                 
                 # Update existing breed or create new one
-                if breed_data['name'] in breed_map:
-                    breed = breed_map[breed_data['name']]
+                if breed_id in breed_map:
+                    breed = breed_map[breed_id]
                     breed.name = breed_data['name']
                     breed.attributes = "\n".join(attributes)
-                    breed.image_url = breed_id
+                    if image_url:
+                        breed.image_url = image_url
                     logger.debug(f"Updated existing breed: {breed_data['name']} with ID: {breed_id}")
                 else:
-                    new_breed = CatBreed(
+                    new_breed = Breed(
                         name=breed_data['name'],
                         attributes="\n".join(attributes),
-                        image_url=breed_id
+                        species='cat',
+                        api_breed_id=breed_id,
+                        image_url=image_url
                     )
                     db.session.add(new_breed)
-                    breed_map[breed_data['name']] = new_breed
+                    breed_map[breed_id] = new_breed
                     logger.debug(f"Added new breed: {breed_data['name']} with ID: {breed_id}")
                 
             except Exception as e:
-                logger.error(f"Error processing breed {breed_data.get('name', 'unknown')}: {str(e)}")
+                logger.error("Rejected cat breed API record id=%r: %s", breed_data.get('id'), e)
                 continue
         
         # Commit all changes
@@ -108,7 +113,7 @@ def fetch_cat_breeds():
         logger.info(f"Successfully updated/added breeds to database")
         
         # Verify the number of breeds in the database
-        breed_count = CatBreed.query.count()
+        breed_count = Breed.query.filter_by(species='cat').count()
         logger.info(f"Current number of breeds in database: {breed_count}")
         
         if breed_count == 0:
@@ -122,7 +127,82 @@ def fetch_cat_breeds():
         db.session.rollback()
         raise
 
+
+def fetch_dog_breeds():
+    """Upsert dog breeds from The Dog API without changing cat records."""
+    try:
+        load_dotenv()
+        api_key = os.getenv('DOG_API_KEY')
+        if not api_key:
+            raise ValueError('DOG_API_KEY is not set')
+
+        response = requests.get(
+            'https://api.thedogapi.com/v1/breeds',
+            headers={'x-api-key': api_key, 'Accept': 'application/json'},
+            timeout=15,
+        )
+        response.raise_for_status()
+        breeds_data = response.json()
+        if not isinstance(breeds_data, list) or not breeds_data:
+            raise ValueError('No dog breeds data received from API')
+
+        existing_dogs = {
+            breed.api_breed_id: breed
+            for breed in Breed.query.filter_by(species='dog').all()
+        }
+        for breed_data in breeds_data:
+            record_id = breed_data.get('id') if isinstance(breed_data, dict) else None
+            try:
+                if isinstance(record_id, bool) or not isinstance(record_id, (int, str)):
+                    raise ValueError('missing or invalid breed ID')
+                api_breed_id = str(record_id).strip()
+                if not api_breed_id or (isinstance(record_id, int) and record_id <= 0):
+                    raise ValueError('missing or invalid breed ID')
+                name = breed_data.get('name')
+                if not isinstance(name, str) or not name.strip():
+                    raise ValueError('missing breed name')
+
+                attributes = []
+                for field, label in (
+                    ('temperament', 'Temperament'),
+                    ('bred_for', 'Bred For'),
+                    ('breed_group', 'Breed Group'),
+                    ('origin', 'Origin'),
+                    ('life_span', 'Life Span'),
+                ):
+                    if breed_data.get(field):
+                        attributes.append(f"{label}: {breed_data[field]}")
+                for field, label, unit in (
+                    ('weight', 'Weight', 'kg'),
+                    ('height', 'Height', 'cm'),
+                ):
+                    value = breed_data.get(field)
+                    if isinstance(value, dict) and value.get('metric'):
+                        attributes.append(f"{label}: {value['metric']} {unit}")
+
+                image = breed_data.get('image')
+                image_url = image.get('url') if isinstance(image, dict) else None
+                breed = existing_dogs.get(api_breed_id)
+                if breed is None:
+                    breed = Breed(species='dog', api_breed_id=api_breed_id)
+                    db.session.add(breed)
+                    existing_dogs[api_breed_id] = breed
+                breed.name = name.strip()
+                breed.attributes = '\n'.join(attributes)
+                if image_url:
+                    breed.image_url = image_url
+            except Exception as error:
+                logger.warning('Rejected dog breed API record id=%r: %s', record_id, error)
+
+        db.session.commit()
+        logger.info('Dog breeds available: %s', Breed.query.filter_by(species='dog').count())
+        return True
+    except Exception:
+        db.session.rollback()
+        logger.exception('Dog breed import failed')
+        raise
+
 if __name__ == '__main__':
     with app.app_context():
         # Fetch breeds
-        fetch_cat_breeds() 
+        fetch_cat_breeds()

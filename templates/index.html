@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Purrfect Paws - Find Your Perfect Cat{% endblock %}
+{% block title %}Purrfect Paws - Find Your Perfect Cat or Dog{% endblock %}
 
 {% block content %}
 <!-- Background Paw Prints -->
@@ -15,8 +15,8 @@
     <div class="container">
         <div class="row justify-content-center">
             <div class="col-md-8 text-center">
-                <h1 class="hero-title">Find Your Perfect Cat Breed</h1>
-                <p class="hero-lead">Take our personality quiz to discover the cat breed that best matches your lifestyle and preferences.</p>
+                <h1 class="hero-title">Find Your Perfect Cat or Dog Breed</h1>
+                <p class="hero-lead">Take our personality quiz to discover the cat or dog breed that best matches your lifestyle and preferences.</p>
                 {% if current_user.is_authenticated %}
                     <a href="{{ url_for('questionnaire') }}" class="btn btn-primary btn-lg">Start Quiz</a>
                 {% else %}
@@ -35,7 +35,7 @@
                 <div class="card-body text-center">
                     <i class="fas fa-paw fa-3x mb-3 text-primary"></i>
                     <h3>Personality Match</h3>
-                    <p>Our quiz analyzes your lifestyle and preferences to find the perfect cat breed for you.</p>
+                    <p>Our quiz analyzes your lifestyle and preferences to find a cat or dog breed for you.</p>
                 </div>
             </div>
         </div>
@@ -44,7 +44,7 @@
                 <div class="card-body text-center">
                     <i class="fas fa-info-circle fa-3x mb-3 text-primary"></i>
                     <h3>Detailed Information</h3>
-                    <p>Get comprehensive information about each cat breed, including temperament, care needs, and characteristics.</p>
+                    <p>Get comprehensive information about each cat or dog breed, including temperament, care needs, and characteristics.</p>
                 </div>
             </div>
         </div>
@@ -79,7 +79,7 @@
                     <span class="h4 mb-0">2</span>
                 </div>
                 <h4>Get Matched</h4>
-                <p>Our algorithm finds the best cat breed for you</p>
+                <p>Our algorithm finds a cat or dog breed for you</p>
             </div>
         </div>
         <div class="col-md-3">

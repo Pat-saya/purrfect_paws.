@@ -60,9 +60,13 @@ pip install -r requirements.txt
 DATABASE_URL=postgresql:///purrfect_paws
 SECRET_KEY=your-secret-key
 CAT_API_KEY=your-cat-api-key  # Get your API key from https://thecatapi.com/
+DOG_API_KEY=your-dog-api-key
 SESSION_COOKIE_SECURE=0  # Use 1 when deployed with HTTPS
 FLASK_DEBUG=0
 ```
+
+Cat and Dog API keys are separate environment variables. Breed imports can load
+each species when its key is available. The questionnaire currently matches cats only.
 
 5. Initialize the database:
 

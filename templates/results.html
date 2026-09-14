@@ -1,7 +1,7 @@
-{% extends "base.html" %} {% block title %}Your Perfect Cat Breed{% endblock %}
+{% extends "base.html" %} {% block title %}Your Perfect {{ species|capitalize }} Breed{% endblock %}
 {% block content %}
 <div class="container mt-5">
-  <h2 class="text-center mb-4 main-title">Your Perfect Cat Breed Match</h2>
+  <h2 class="text-center mb-4 main-title">Your Perfect {{ species|capitalize }} Breed Match</h2>
 
   {% if breed_scores and breed_scores[0] %}
   <div class="row justify-content-center">
@@ -11,18 +11,12 @@
           <div class="text-center mb-4">
             <h3 class="card-title breed-name">{{ breed_scores[0].name }}</h3>
             <div class="breed-image-container">
-              <div id="imageLoading" class="text-center">
-                <div class="spinner-border text-primary" role="status">
-                  <span class="visually-hidden">Loading...</span>
-                </div>
-              </div>
-              <img
-                id="breedImage"
-                src=""
-                alt="{{ breed_scores[0].name }}"
-                class="img-fluid rounded"
-                style="display: none"
-              />
+              {% if breed_scores[0].image_url %}
+              <img id="breedImage" src="{{ breed_scores[0].image_url }}"
+                   alt="{{ breed_scores[0].name }} {{ species }}" class="img-fluid rounded" />
+              {% else %}
+              <p class="text-muted" role="status">No {{ species }} image is available.</p>
+              {% endif %}
             </div>
           </div>
 
@@ -58,6 +52,8 @@
             {% endif %} {% endif %} {% endfor %}
           </div>
 
+          <p class="text-muted mt-4">This match is a starting point. Individual pets vary, so research the breed and talk with responsible breeders or adoption professionals.</p>
+
           <div class="social-share mt-4">
             <h4 class="text-center mb-3">Share Your Results</h4>
             <div class="share-buttons">
@@ -78,7 +74,7 @@
                 <i class="fab fa-linkedin-in"></i>
               </a>
               <a
-                href="mailto:?subject=My Cat Breed Match - {{ breed_scores[0].name }}&body=I matched with {{ breed_scores[0].name }}! Take the quiz at {{ request.url }}"
+                href="mailto:?subject=My {{ species|capitalize }} Breed Match - {{ breed_scores[0].name }}&body=I matched with {{ breed_scores[0].name }}! Take the quiz at {{ request.url }}"
                 class="share-btn email"
                 title="Share via Email"
               >
@@ -317,44 +313,5 @@
   }
 </style>
 
-<script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const breedImage = document.getElementById("breedImage");
-    const imageLoading = document.getElementById("imageLoading");
-    const breedId = "{{ breed_scores[0].image_url }}";
 
-    function handleImageError() {
-      console.error("Error loading image");
-      imageLoading.innerHTML =
-        '<p class="text-muted">Unable to load cat image. Please try refreshing the page.</p>';
-      imageLoading.style.display = "block";
-      breedImage.style.display = "none";
-    }
-
-    // Fetch image from The Cat API
-    fetch(`https://api.thecatapi.com/v1/images/search?breed_ids=${breedId}`)
-      .then((response) => response.json())
-      .then((data) => {
-        if (data && data[0] && data[0].url) {
-          breedImage.src = data[0].url;
-          breedImage.onload = function () {
-            console.log("Image loaded successfully");
-            imageLoading.style.display = "none";
-            breedImage.style.display = "block";
-          };
-          breedImage.onerror = handleImageError;
-        } else {
-          handleImageError();
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching image:", error);
-        handleImageError();
-      });
-
-    // Start loading the image
-    imageLoading.style.display = "block";
-    breedImage.style.display = "none";
-  });
-</script>
 {% endblock %}

@@ -51,23 +51,32 @@ class Choice(db.Model):
     text = db.Column(db.String(200), nullable=False)
     cat_trait = db.Column(db.String(50), nullable=False)
 
-class CatBreed(db.Model):
-    __tablename__ = 'cat_breeds'
+class Breed(db.Model):
+    __tablename__ = 'breeds'
+    __table_args__ = (
+        db.CheckConstraint("species IN ('cat', 'dog')", name='breeds_species_check'),
+        db.UniqueConstraint('species', 'api_breed_id', name='breeds_species_api_breed_id_key'),
+    )
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     attributes = db.Column(db.Text, nullable=False)
-    image_url = db.Column(db.String(200))
+    species = db.Column(db.String(10), nullable=False)
+    api_breed_id = db.Column(db.String(200), nullable=False)
+    image_url = db.Column(db.String(500))
 
 class UserQuestionnaire(db.Model):
     __tablename__ = 'user_questionnaires'
+    __table_args__ = (db.CheckConstraint("species IN ('cat', 'dog')", name='user_questionnaires_species_check'),)
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     answers = db.Column(db.JSON, nullable=False)
+    species = db.Column(db.String(10), nullable=False)
     completed = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    matched_breed_id = db.Column(db.Integer, db.ForeignKey('cat_breeds.id'))
+    matched_breed_id = db.Column(db.Integer, db.ForeignKey('breeds.id'))
+    breed = db.relationship('Breed')
 
 class UserResponse(db.Model):
     __tablename__ = 'user_responses'
@@ -83,9 +92,8 @@ class QuizResult(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE")) #Links to the user who took the quiz
-    breed_id = db.Column(db.Integer, db.ForeignKey('cat_breeds.id', ondelete="CASCADE"))#Links to the recommended cat breed
+    breed_id = db.Column(db.Integer, db.ForeignKey('breeds.id', ondelete="CASCADE"))#Links to the recommended breed
 
     user = db.relationship("User", backref="quiz_results")
-    breed = db.relationship("CatBreed")
-
+    breed = db.relationship("Breed")
 

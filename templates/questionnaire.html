@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Cat Breed Questionnaire{% endblock %}
+{% block title %}Find Your Cat or Dog Match{% endblock %}
 
 {% block content %}
 <div class="container mt-5 mb-5">
@@ -8,21 +8,25 @@
         <div class="col-md-8">
             <div class="card">
                 <div class="card-header text-center">
-                    <h2>Find Your Perfect Cat Breed</h2>
-                    <p class="text-muted">Answer these questions to discover the cat breed that best matches your lifestyle</p>
-                    <div class="progress mb-3">
-                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    <h2 id="quizTitle">Find Your Cat or Dog Match</h2>
+                    <p class="text-muted" id="quizIntro">Choose a pet to begin.</p>
+                    <div class="progress mb-3" id="quizProgress" hidden>
+                        <div class="progress-bar" role="progressbar" aria-label="Quiz progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width: 0%"></div>
                     </div>
                 </div>
                 <div class="card-body">
-                    <form id="questionnaireForm">
-                        <div id="questionsContainer">
-                            <!-- Questions will be loaded here dynamically -->
-                        </div>
+                    <div id="speciesChoice" class="text-center">
+                        <button type="button" class="btn btn-primary m-2" data-species="cat">Find My Cat Match</button>
+                        <button type="button" class="btn btn-primary m-2" data-species="dog">Find My Dog Match</button>
+                    </div>
+                    <p id="quizError" class="alert alert-danger" role="alert" hidden></p>
+                    <form id="questionnaireForm" hidden>
+                        <button type="button" class="btn btn-link mb-3" id="changeSpeciesBtn">Back to Cat/Dog choice</button>
+                        <div id="questionsContainer"></div>
                         <div class="d-flex justify-content-between mt-4 mb-5">
-                            <button type="button" class="btn btn-secondary" id="prevBtn" style="display: none;">Previous</button>
+                            <button type="button" class="btn btn-secondary" id="prevBtn" hidden>Previous</button>
                             <button type="button" class="btn btn-primary" id="nextBtn">Next</button>
-                            <button type="submit" class="btn btn-success" id="submitBtn" style="display: none;">Get My Match</button>
+                            <button type="submit" class="btn btn-success" id="submitBtn" hidden>Get My Match</button>
                         </div>
                     </form>
                 </div>
@@ -32,6 +36,7 @@
 </div>
 
 <style>
+    [hidden] { display: none !important; }
     .card {
         border: none;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
@@ -70,129 +75,151 @@
 </style>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('questionnaireForm');
     const questionsContainer = document.getElementById('questionsContainer');
+    const speciesChoice = document.getElementById('speciesChoice');
+    const title = document.getElementById('quizTitle');
+    const intro = document.getElementById('quizIntro');
+    const error = document.getElementById('quizError');
+    const progress = document.getElementById('quizProgress');
+    const progressBar = progress.querySelector('.progress-bar');
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
     const submitBtn = document.getElementById('submitBtn');
-    const progressBar = document.querySelector('.progress-bar');
-    
-    let currentAnswers = {};
+    const changeSpeciesBtn = document.getElementById('changeSpeciesBtn');
+    const submissionToken = {{ submission_token|tojson }};
+    let species = null;
     let questions = [];
-    let currentQuestionIndex = 0;
+    let answers = {};
+    let currentIndex = 0;
+    let submitting = false;
 
-    // Fetch questions from the API
-    fetch('/api/questionnaire')
-        .then(response => response.json())
-        .then(data => {
+    function showError(message) {
+        error.textContent = message;
+        error.hidden = false;
+    }
+
+    function showQuestion() {
+        questionsContainer.querySelectorAll('.question-container').forEach((item, index) => {
+            item.classList.toggle('active', index === currentIndex);
+        });
+        prevBtn.hidden = currentIndex === 0;
+        nextBtn.hidden = currentIndex === questions.length - 1;
+        submitBtn.hidden = currentIndex !== questions.length - 1;
+        const percent = Math.round((currentIndex + 1) / questions.length * 100);
+        progressBar.style.width = percent + '%';
+        progressBar.setAttribute('aria-valuenow', percent);
+    }
+
+    function saveAnswer() {
+        const question = questions[currentIndex];
+        const selected = questionsContainer.querySelector(`input[name="${question.id}"]:checked`);
+        if (selected) answers[question.id] = selected.value;
+        return Boolean(selected);
+    }
+
+    async function chooseSpecies(chosen) {
+        error.hidden = true;
+        try {
+            const response = await fetch('/api/questionnaire?species=' + encodeURIComponent(chosen));
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Could not load questions.');
+            species = chosen;
             questions = data.questions;
-            currentAnswers = data.current_answers || {};
-
-            // Create question containers
-            questions.forEach((q, index) => {
-                const questionDiv = document.createElement('div');
-                questionDiv.className = 'question-container';
-                questionDiv.innerHTML = `
-                    <h4 class="mb-3">${index + 1}. ${q.question}</h4>
-                    <div class="answers">
-                        ${q.answers.map((answer, i) => `
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" 
-                                    name="q${index + 1}" 
-                                    id="q${index + 1}a${i}" 
-                                    value="${answer}"
-                                    ${currentAnswers[`q${index + 1}`] === answer ? 'checked' : ''}>
-                                <label class="form-check-label" for="q${index + 1}a${i}">
-                                    ${answer}
-                                </label>
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
-                questionsContainer.appendChild(questionDiv);
+            answers = data.current_answers || {};
+            currentIndex = 0;
+            questionsContainer.replaceChildren();
+            questions.forEach((question, index) => {
+                const fieldset = document.createElement('fieldset');
+                fieldset.className = 'question-container';
+                const legend = document.createElement('legend');
+                legend.className = 'h4 mb-3';
+                legend.textContent = `${index + 1}. ${question.question}`;
+                fieldset.appendChild(legend);
+                question.answers.forEach((answer, optionIndex) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'form-check';
+                    const input = document.createElement('input');
+                    input.className = 'form-check-input';
+                    input.type = 'radio';
+                    input.name = question.id;
+                    input.id = `${question.id}a${optionIndex}`;
+                    input.value = answer;
+                    input.checked = answers[question.id] === answer;
+                    const label = document.createElement('label');
+                    label.className = 'form-check-label';
+                    label.htmlFor = input.id;
+                    label.textContent = answer;
+                    wrapper.append(input, label);
+                    fieldset.appendChild(wrapper);
+                });
+                questionsContainer.appendChild(fieldset);
             });
-
-            // Show first question
-            showQuestion(0);
-            updateProgress();
-        })
-        .catch(error => console.error('Error:', error));
-
-    function showQuestion(index) {
-        // Hide all questions
-        document.querySelectorAll('.question-container').forEach(q => {
-            q.classList.remove('active');
-        });
-
-        // Show current question
-        document.querySelectorAll('.question-container')[index].classList.add('active');
-
-        // Update buttons
-        prevBtn.style.display = index === 0 ? 'none' : 'block';
-        nextBtn.style.display = index === questions.length - 1 ? 'none' : 'block';
-        submitBtn.style.display = index === questions.length - 1 ? 'block' : 'none';
-
-        // Update progress bar
-        updateProgress();
-    }
-
-    function updateProgress() {
-        const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
-        progressBar.style.width = `${progress}%`;
-    }
-
-    function saveCurrentAnswer() {
-        const currentQuestion = document.querySelector('.question-container.active');
-        const selected = currentQuestion.querySelector(`input[name="q${currentQuestionIndex + 1}"]:checked`);
-        if (selected) {
-            currentAnswers[`q${currentQuestionIndex + 1}`] = selected.value;
+            title.textContent = `Find Your Perfect ${chosen === 'cat' ? 'Cat' : 'Dog'} Breed`;
+            intro.textContent = 'Answer these questions to find a breed that fits your lifestyle.';
+            speciesChoice.hidden = true;
+            form.hidden = false;
+            progress.hidden = false;
+            showQuestion();
+        } catch (err) {
+            showError(err.message);
         }
     }
 
-    // Event Listeners
-    prevBtn.addEventListener('click', function() {
-        if (currentQuestionIndex > 0) {
-            saveCurrentAnswer();
-            currentQuestionIndex--;
-            showQuestion(currentQuestionIndex);
-        }
+    speciesChoice.querySelectorAll('[data-species]').forEach(button => {
+        button.addEventListener('click', () => chooseSpecies(button.dataset.species));
     });
-
-    nextBtn.addEventListener('click', function() {
-        if (currentQuestionIndex < questions.length - 1) {
-            saveCurrentAnswer();
-            currentQuestionIndex++;
-            showQuestion(currentQuestionIndex);
-        }
+    changeSpeciesBtn.addEventListener('click', () => {
+        species = null;
+        questions = [];
+        answers = {};
+        form.hidden = true;
+        progress.hidden = true;
+        speciesChoice.hidden = false;
+        title.textContent = 'Find Your Cat or Dog Match';
+        intro.textContent = 'Choose a pet to begin.';
+        error.hidden = true;
     });
-
-    // Handle form submission
-    form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        saveCurrentAnswer();
-
-        // Send answers to server
-        fetch('/questionnaire', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token() }}'
-            },
-            body: JSON.stringify({ answers: currentAnswers })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                window.location.href = data.redirect;
-            } else {
-                alert(data.message || 'An error occurred. Please try again.');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred. Please try again.');
-        });
+    prevBtn.addEventListener('click', () => {
+        saveAnswer();
+        if (currentIndex > 0) currentIndex--;
+        showQuestion();
+    });
+    nextBtn.addEventListener('click', () => {
+        if (!saveAnswer()) {
+            showError('Please choose an answer before continuing.');
+            return;
+        }
+        error.hidden = true;
+        if (currentIndex < questions.length - 1) currentIndex++;
+        showQuestion();
+    });
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (submitting) return;
+        saveAnswer();
+        if (questions.some(question => !answers[question.id])) {
+            showError('Please answer all 10 questions before submitting.');
+            return;
+        }
+        submitting = true;
+        submitBtn.disabled = true;
+        error.hidden = true;
+        try {
+            const response = await fetch('/questionnaire', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': {{ csrf_token()|tojson }}},
+                body: JSON.stringify({species, answers, submission_token: submissionToken})
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.message || 'Could not save your match.');
+            window.location.href = data.redirect;
+        } catch (err) {
+            showError(err.message);
+            submitting = false;
+            submitBtn.disabled = false;
+        }
     });
 });
 </script>
